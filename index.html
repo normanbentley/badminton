@@ -43,12 +43,18 @@
   .info { border: 0; background: transparent; color: var(--mut); font-size: 12px; font-weight: 500; padding: 4px 8px; border-radius: 999px; cursor: pointer; }
   .desc { padding: 4px 16px 0; font-size: 14px; line-height: 1.35; color: var(--mut); display: none; }
   .desc.show { display: block; }
-  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 12px; }
-  .grid button { height: 44px; border: 0; border-radius: 10px; font-size: 16px; font-weight: 600; background: var(--faint); color: #57534e; cursor: pointer; transition: transform .05s; }
-  .grid button:active { transform: scale(0.94); }
-  .grid button.on { background: var(--accent); color: #fff; }
+  .bandopts { display: flex; flex-direction: column; gap: 6px; padding: 12px; }
+  .bandopt { display: flex; gap: 10px; align-items: flex-start; text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 12px; cursor: pointer; font: inherit; transition: transform .05s; }
+  .bandopt:active { transform: scale(0.98); }
+  .bandopt .chip { width: 22px; height: 22px; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; margin-top: 1px; }
+  .bandopt .txt { font-size: 13px; line-height: 1.35; color: #57534e; }
+  .bandopt.on .txt { color: var(--ink); font-weight: 500; }
+  .fine { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 12px 12px; }
+  .fine button { height: 44px; border: 0; border-radius: 10px; font-size: 14px; font-weight: 600; background: var(--faint); color: #57534e; cursor: pointer; transition: transform .05s; }
+  .fine button:active { transform: scale(0.96); }
   details.bands { border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 12px 16px; font-size: 14px; }
   details.bands summary { cursor: pointer; font-weight: 600; color: #44403c; }
+  details.bands .note { margin: 10px 0 0; font-size: 13px; color: var(--mut); }
   .band { display: flex; gap: 8px; margin-top: 8px; align-items: flex-start; }
   .band .g { width: 20px; height: 20px; border-radius: 5px; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; margin-top: 1px; }
   .band span.t { color: var(--mut); }
@@ -91,7 +97,7 @@
 <div class="wrap">
   <header>
     <h1><span class="dot"></span>Player Grading</h1>
-    <p>Tap a score for each skill. Grade is worked out for you.</p>
+    <p>For each skill, pick the highest band that's still true in game play — then low or high within it.</p>
   </header>
 
   <div class="tabs">
@@ -105,8 +111,9 @@
     <input class="name" id="pname" placeholder="Player name (optional)" autocomplete="off">
     <div id="cards"></div>
     <details class="bands">
-      <summary>Grade bands (A–E)</summary>
+      <summary>How the bands work</summary>
       <div id="bandlist"></div>
+      <p class="note">Within a band, the low number means just into it and the high number means solid in it. Rate straight after watching — don't score from memory at the end of the session.</p>
     </details>
   </main>
 
@@ -126,7 +133,7 @@
     <div class="gchip" id="gchip">–</div>
     <div class="meta">
       <div class="l1" id="metaL1">No scores yet</div>
-      <div class="l2" id="metaL2">Rate all 5 skills to save</div>
+      <div class="l2" id="metaL2">Score all 5 skills to save</div>
     </div>
     <button class="btn save" id="saveBtn" onclick="save()" disabled>Save</button>
     <button class="btn clear hidden" id="clearBtn" onclick="clearForm()">Clear</button>
@@ -137,22 +144,73 @@
 
 <script>
 const SKILLS = [
-  { key:"grip", name:"Grip / Stroke", desc:"Uses correct forehand, backhand and front-court grip. Flexible with grip changes for every situation." },
-  { key:"footwork", name:"Footwork", desc:"Uses chassé steps around the court. Stops when playing a shot without stepping beyond it, uses rotation on overhead shots, and isn't flat-footed when waiting for a return." },
-  { key:"positioning", name:"Positioning", desc:"Correct position when serving and receiving. Base position correct for both attacking and defensive play. Uses correct rotation to cover partner and anticipate the return." },
-  { key:"tactics", name:"Tactics", desc:"Court awareness. Plays shots of correct length and tight to the net to exploit the full court. Actively plays into gaps and moves opponents around." },
-  { key:"accuracy", name:"Accuracy", desc:"Low hitting-error rate and accuracy in hitting direction." }
+  { key:"grip", name:"Grip / Stroke",
+    desc:"Uses correct forehand, backhand and front-court grip. Flexible with grip changes for every situation.",
+    anchors:{
+      E:"One grip for everything (often frying-pan); backhand shots aren't possible yet.",
+      D:"Correct forehand grip in feeds and warm-up, but grip changes are slow or wrong once rallying.",
+      C:"Changes between forehand and backhand grips in normal rallies; late or wrong when rushed at the net.",
+      B:"Grip changes are fluent in game play, including front-court grips; only lapses when fully stretched.",
+      A:"Grip adjustments are automatic — shortens at the net, adapts for deception; never limits a shot."
+    }},
+  { key:"footwork", name:"Footwork",
+    desc:"Uses chassé steps around the court. Stops when playing a shot without stepping beyond it, uses rotation on overhead shots, and isn't flat-footed when waiting for a return.",
+    anchors:{
+      E:"Flat-footed; walks or runs to the shuttle with no recognisable pattern.",
+      D:"Chassés in drills but reverts to running and lunging in rallies; often steps beyond the shot.",
+      C:"Correct movement patterns in normal rallies, but late back to base and flat-footed under pressure.",
+      B:"Split-steps and recovers to base consistently in games; occasional lapses at full pace.",
+      A:"Anticipates — arrives early and balanced with shot options, even under attack."
+    }},
+  { key:"positioning", name:"Positioning",
+    desc:"Correct position when serving and receiving. Base position correct for both attacking and defensive play. Uses correct rotation to cover partner and anticipate the return.",
+    anchors:{
+      E:"Stands wherever the last shot left them; no base position.",
+      D:"Takes correct serve and receive positions, but doesn't recover to a base during rallies.",
+      C:"Holds the right attacking/defensive base in normal rallies; shape breaks down under pressure.",
+      B:"Rotates with partner and covers gaps consistently in games; rare lapses.",
+      A:"Reads the return and shifts early; cover of partner and court looks seamless."
+    }},
+  { key:"tactics", name:"Tactics",
+    desc:"Court awareness. Plays shots of correct length and tight to the net to exploit the full court. Actively plays into gaps and moves opponents around. Only score this from match play, not drills.",
+    anchors:{
+      E:"No plan visible — returns the shuttle straight back to the opponent.",
+      D:"Plays to space when there's time; shot choices are predictable.",
+      C:"Builds simple patterns (good length, tight net shots) in rallies, but abandons them under pressure.",
+      B:"Consistently moves opponents around and plays into gaps in match play; varies pace and length.",
+      A:"Controls rallies — creates and exploits weaknesses, disguises intent, adapts the plan to the opponent."
+    }},
+  { key:"accuracy", name:"Accuracy",
+    desc:"Low hitting-error rate and accuracy in hitting direction. Tip: count errors over 10–20 shots rather than judging by feel.",
+    anchors:{
+      E:"Most rallies end on their unforced error — 5 or more misses per 10 shots.",
+      D:"Frequent hitting errors, around 3–4 per 10 shots; direction largely untargeted.",
+      C:"Around 2 errors per 10 shots; can aim for half-court zones.",
+      B:"About 1 error per 10 shots; hits targeted zones under match pressure.",
+      A:"Rarely misses — roughly 1 in 20 or better; pinpoint length and direction even when stretched."
+    }}
+];
+// Displayed low to high so the rater climbs the ladder and stops
+// at the last description that still holds.
+const BANDS = [
+  { g:"E", lo:1, color:"#b91c1c" },
+  { g:"D", lo:3, color:"#c2410c" },
+  { g:"C", lo:5, color:"#b45309" },
+  { g:"B", lo:7, color:"#4d7c0f" },
+  { g:"A", lo:9, color:"#15803d" }
 ];
 const GRADES = [
-  { g:"A", range:[9,10], color:"#15803d", label:"Full command of all aspects of the game." },
-  { g:"B", range:[7,8],  color:"#4d7c0f", label:"Technically correct; less accurate than A." },
-  { g:"C", range:[5,6],  color:"#b45309", label:"Some technical deficiencies; higher error rate than B." },
-  { g:"D", range:[3,4],  color:"#c2410c", label:"Technical deficiencies; lacking court awareness." },
-  { g:"E", range:[1,2],  color:"#b91c1c", label:"Basic beginner level." }
+  { g:"A", range:[9,10], color:"#15803d", label:"Consistent under pressure, and adapts or disguises at pace." },
+  { g:"B", range:[7,8],  color:"#4d7c0f", label:"Consistent in competitive play; occasional lapses." },
+  { g:"C", range:[5,6],  color:"#b45309", label:"Executes in normal rallies; breaks down under pressure or at pace." },
+  { g:"D", range:[3,4],  color:"#c2410c", label:"Executes in drills and feeds; breaks down in rallies." },
+  { g:"E", range:[1,2],  color:"#b91c1c", label:"Can't yet execute the technique, even unpressured." }
 ];
 const KEY = "badminton-grading-roster-v1";
 
-let scores = { grip:null, footwork:null, positioning:null, tactics:null, accuracy:null };
+const blank = () => Object.fromEntries(SKILLS.map(s => [s.key, null]));
+let scores = blank();   // final 1–10 score per skill
+let bands = blank();    // chosen band letter, before low/high is picked
 let roster = load();
 let expandedId = null;
 
@@ -217,12 +275,16 @@ function renderCards() {
         <button class="info" onclick="toggleDesc('${s.key}')" id="info-${s.key}">What's this?</button>
       </div>
       <p class="desc" id="desc-${s.key}">${s.desc}</p>
-      <div class="grid" id="grid-${s.key}">
-        ${Array.from({length:10},(_,i)=>i+1).map(n =>
-          `<button onclick="setScore('${s.key}',${n})" data-n="${n}">${n}</button>`).join("")}
+      <div class="bandopts" id="bands-${s.key}">
+        ${BANDS.map(b => `
+          <button class="bandopt" onclick="setBand('${s.key}','${b.g}')" data-g="${b.g}">
+            <span class="chip" style="background:${b.color}">${b.g}</span>
+            <span class="txt">${s.anchors[b.g]}</span>
+          </button>`).join("")}
       </div>
+      <div class="fine hidden" id="fine-${s.key}"></div>
     </section>`).join("");
-  refreshGrids();
+  refreshCards();
 }
 function toggleDesc(k) {
   const d = document.getElementById("desc-"+k);
@@ -230,21 +292,42 @@ function toggleDesc(k) {
   const show = d.classList.toggle("show");
   b.textContent = show ? "Hide" : "What's this?";
 }
-function setScore(k, n) {
-  scores[k] = (scores[k] === n) ? null : n;
-  refreshGrids(); refreshBar();
+function setBand(k, g) {
+  if (bands[k] === g) { bands[k] = null; scores[k] = null; }
+  else { bands[k] = g; scores[k] = null; }
+  refreshCards(); refreshBar();
 }
-function refreshGrids() {
+function setFine(k, n) {
+  scores[k] = (scores[k] === n) ? null : n;
+  refreshCards(); refreshBar();
+}
+function refreshCards() {
   SKILLS.forEach(s => {
-    const g = document.getElementById("grid-"+s.key);
-    if (!g) return;
-    [...g.children].forEach(btn => {
-      btn.classList.toggle("on", scores[s.key] === Number(btn.dataset.n));
+    const g = bands[s.key];
+    const wrap = document.getElementById("bands-"+s.key);
+    if (!wrap) return;
+    [...wrap.querySelectorAll(".bandopt")].forEach(btn => {
+      const bd = BANDS.find(x => x.g === btn.dataset.g);
+      const on = btn.dataset.g === g;
+      btn.classList.toggle("on", on);
+      btn.style.borderColor = on ? bd.color : "";
+      btn.style.boxShadow = on ? `inset 0 0 0 1px ${bd.color}` : "";
     });
+    const fine = document.getElementById("fine-"+s.key);
+    if (!g) { fine.classList.add("hidden"); fine.innerHTML = ""; return; }
+    const bd = BANDS.find(x => x.g === g);
+    fine.classList.remove("hidden");
+    fine.innerHTML = [bd.lo, bd.lo+1].map((n,i) => {
+      const on = scores[s.key] === n;
+      return `<button onclick="setFine('${s.key}',${n})" style="${on ? `background:${bd.color};color:#fff` : ""}">
+        ${n} · ${i===0 ? "Just into" : "Solid"} ${g}
+      </button>`;
+    }).join("");
   });
 }
 function refreshBar() {
   const rated = SKILLS.filter(s => scores[s.key] != null);
+  const pending = SKILLS.filter(s => bands[s.key] != null && scores[s.key] == null);
   const sum = rated.reduce((a,s)=>a+scores[s.key],0);
   const complete = rated.length === SKILLS.length;
   const avg = complete ? sum/SKILLS.length : (rated.length ? sum/rated.length : null);
@@ -252,17 +335,18 @@ function refreshBar() {
   const chip = document.getElementById("gchip");
   chip.textContent = grade ? grade.g : "–";
   chip.style.background = grade ? grade.color : "#d6d3d1";
-  document.getElementById("metaL1").textContent = complete ? `Grade ${grade.g}` : (rated.length ? `${rated.length}/5 rated` : "No scores yet");
+  document.getElementById("metaL1").textContent = complete ? `Grade ${grade.g}` : (rated.length ? `${rated.length}/5 scored` : "No scores yet");
   document.getElementById("metaL2").textContent = complete
     ? `avg ${avg.toFixed(1)} · total ${sum}`
-    : (rated.length ? `running avg ${avg.toFixed(1)}` : "Rate all 5 skills to save");
+    : pending.length ? `Pick low or high for ${pending[0].name}`
+    : rated.length ? `running avg ${avg.toFixed(1)}` : "Score all 5 skills to save";
   document.getElementById("saveBtn").disabled = !complete;
-  document.getElementById("clearBtn").classList.toggle("hidden", rated.length === 0);
+  document.getElementById("clearBtn").classList.toggle("hidden", rated.length === 0 && pending.length === 0);
 }
 function clearForm() {
-  scores = { grip:null, footwork:null, positioning:null, tactics:null, accuracy:null };
+  scores = blank(); bands = blank();
   document.getElementById("pname").value = "";
-  refreshGrids(); refreshBar();
+  refreshCards(); refreshBar();
 }
 function save() {
   const rated = SKILLS.filter(s => scores[s.key] != null);
@@ -300,7 +384,7 @@ function renderRoster() {
         <div class="ch">${ex ? "▲" : "▼"}</div>
       </div>
       ${ex ? `<div class="pdetail">
-        ${SKILLS.map(s=>`<div class="r"><span>${s.name}</span><b>${p.scores[s.key]}</b></div>`).join("")}
+        ${SKILLS.map(s=>`<div class="r"><span>${s.name}</span><b>${p.scores[s.key]} · ${gradeFor(p.scores[s.key]).g}</b></div>`).join("")}
         <button class="del" onclick="del(${p.id})">Delete</button>
       </div>` : ""}
     </div>`;
