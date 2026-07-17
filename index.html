@@ -35,6 +35,10 @@
   .tabrow button { border: 0; background: transparent; padding: 8px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--mut); cursor: pointer; }
   .tabrow button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
   main { padding: 0 16px; }
+  .scale { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #e7e5e4; border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+  .scale button { border: 0; background: transparent; padding: 7px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--mut); cursor: pointer; }
+  .scale button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .scalehint { margin: -6px 0 12px; padding: 0 4px; font-size: 12px; color: #a8a29e; }
   input.name { width: 100%; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 12px 16px; font-size: 16px; outline: none; margin-bottom: 12px; }
   input.name:focus { border-color: #a8a29e; }
   .card { border: 1px solid var(--line); background: var(--card); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
@@ -108,6 +112,11 @@
   </div>
 
   <main id="view-grade">
+    <div class="scale">
+      <button id="mode-club" onclick="setMode('club')">Club scale</button>
+      <button id="mode-tech" onclick="setMode('tech')">Technical scale</button>
+    </div>
+    <p class="scalehint" id="scalehint"></p>
     <input class="name" id="pname" placeholder="Player name (optional)" autocomplete="off">
     <div id="cards"></div>
     <details class="bands">
@@ -143,51 +152,118 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// Two rubrics over the same 1-10 scoring:
+//  club (default) - effect-based, calibrated to club-night level; style doesn't matter
+//  tech           - form-based, coaching-standard technique
+const MODES = {
+  club: { name:"Club", hint:"Judged on effect, calibrated to our club — style doesn't matter." },
+  tech: { name:"Technical", hint:"Judged on coached technique — a stricter, form-based standard." }
+};
 const SKILLS = [
   { key:"grip", name:"Grip / Stroke",
-    desc:"Uses correct forehand, backhand and front-court grip. Flexible with grip changes for every situation.",
+    desc:{
+      club:"Can they produce the shot they need, on either side, however they hold the racquet?",
+      tech:"Uses correct forehand, backhand and front-court grip. Flexible with grip changes for every situation."
+    },
     anchors:{
-      E:"One grip for everything (often frying-pan); backhand shots aren't possible yet.",
-      D:"Correct forehand grip in feeds and warm-up, but grip changes are slow or wrong once rallying.",
-      C:"Changes between forehand and backhand grips in normal rallies; late or wrong when rushed at the net.",
-      B:"Grip changes are fluent in game play, including front-court grips; only lapses when fully stretched.",
-      A:"Grip adjustments are automatic — shortens at the net, adapts for deception; never limits a shot."
+      club:{
+        E:"Can get the shuttle back but with little control; the weak side is a liability.",
+        D:"Controlled shots on the forehand side when given time; the backhand side is mostly a poke or gets avoided.",
+        C:"Controlled shots on both sides in normal rallies; control drops when rushed or at full reach.",
+        B:"Full range of shots on both sides in games — clears, drops, drives; only the hardest positions cause trouble.",
+        A:"Produces whatever shot the situation needs from anywhere — among the best hitters at club night."
+      },
+      tech:{
+        E:"One grip for everything (often frying-pan); backhand shots aren't possible yet.",
+        D:"Correct forehand grip in feeds and warm-up, but grip changes are slow or wrong once rallying.",
+        C:"Changes between forehand and backhand grips in normal rallies; late or wrong when rushed at the net.",
+        B:"Grip changes are fluent in game play, including front-court grips; only lapses when fully stretched.",
+        A:"Grip adjustments are automatic — shortens at the net, adapts for deception; never limits a shot."
+      }
     }},
   { key:"footwork", name:"Footwork",
-    desc:"Uses chassé steps around the court. Stops when playing a shot without stepping beyond it, uses rotation on overhead shots, and isn't flat-footed when waiting for a return.",
+    desc:{
+      club:"Do they get to the shuttle early and balanced? Chassé or not — style doesn't matter.",
+      tech:"Uses chassé steps around the court. Stops when playing a shot without stepping beyond it, uses rotation on overhead shots, and isn't flat-footed when waiting for a return."
+    },
     anchors:{
-      E:"Flat-footed; walks or runs to the shuttle with no recognisable pattern.",
-      D:"Chassés in drills but reverts to running and lunging in rallies; often steps beyond the shot.",
-      C:"Correct movement patterns in normal rallies, but late back to base and flat-footed under pressure.",
-      B:"Split-steps and recovers to base consistently in games; occasional lapses at full pace.",
-      A:"Anticipates — arrives early and balanced with shot options, even under attack."
+      club:{
+        E:"Often doesn't reach the shuttle, or arrives off-balance with no shot available.",
+        D:"Covers the court when there's time; caught flat-footed by changes of direction.",
+        C:"Arrives in time during normal rallies but often stretched, with only one shot option left.",
+        B:"Arrives early and balanced in games; only genuinely fast attacks catch them out.",
+        A:"Always seems to be in the right place with time to spare; movement never limits their game."
+      },
+      tech:{
+        E:"Flat-footed; walks or runs to the shuttle with no recognisable pattern.",
+        D:"Chassés in drills but reverts to running and lunging in rallies; often steps beyond the shot.",
+        C:"Correct movement patterns in normal rallies, but late back to base and flat-footed under pressure.",
+        B:"Split-steps and recovers to base consistently in games; occasional lapses at full pace.",
+        A:"Anticipates — arrives early and balanced with shot options, even under attack."
+      }
     }},
   { key:"positioning", name:"Positioning",
-    desc:"Correct position when serving and receiving. Base position correct for both attacking and defensive play. Uses correct rotation to cover partner and anticipate the return.",
+    desc:{
+      club:"Are they in the right place before the shot comes, and is their partner covered?",
+      tech:"Correct position when serving and receiving. Base position correct for both attacking and defensive play. Uses correct rotation to cover partner and anticipate the return."
+    },
     anchors:{
-      E:"Stands wherever the last shot left them; no base position.",
-      D:"Takes correct serve and receive positions, but doesn't recover to a base during rallies.",
-      C:"Holds the right attacking/defensive base in normal rallies; shape breaks down under pressure.",
-      B:"Rotates with partner and covers gaps consistently in games; rare lapses.",
-      A:"Reads the return and shifts early; cover of partner and court looks seamless."
+      club:{
+        E:"Stands wherever the last shot left them; leaves half the court open.",
+        D:"Knows where to stand for serve and receive, but drifts out of position during rallies.",
+        C:"Keeps a sensible base in normal rallies; gaps appear when the pace lifts or their partner is pulled wide.",
+        B:"Covers the right space and rotates with their partner consistently; hard to find a gap against them.",
+        A:"Moves before the shot is played; makes the court feel small to opponents."
+      },
+      tech:{
+        E:"Stands wherever the last shot left them; no base position.",
+        D:"Takes correct serve and receive positions, but doesn't recover to a base during rallies.",
+        C:"Holds the right attacking/defensive base in normal rallies; shape breaks down under pressure.",
+        B:"Rotates with partner and covers gaps consistently in games; rare lapses.",
+        A:"Reads the return and shifts early; cover of partner and court looks seamless."
+      }
     }},
   { key:"tactics", name:"Tactics",
-    desc:"Court awareness. Plays shots of correct length and tight to the net to exploit the full court. Actively plays into gaps and moves opponents around. Only score this from match play, not drills.",
+    desc:{
+      club:"Do they use the court and their opponents' weaknesses deliberately? Only score this from match play, not drills.",
+      tech:"Court awareness. Plays shots of correct length and tight to the net to exploit the full court. Actively plays into gaps and moves opponents around. Only score this from match play, not drills."
+    },
     anchors:{
-      E:"No plan visible — returns the shuttle straight back to the opponent.",
-      D:"Plays to space when there's time; shot choices are predictable.",
-      C:"Builds simple patterns (good length, tight net shots) in rallies, but abandons them under pressure.",
-      B:"Consistently moves opponents around and plays into gaps in match play; varies pace and length.",
-      A:"Controls rallies — creates and exploits weaknesses, disguises intent, adapts the plan to the opponent."
+      club:{
+        E:"Hits the shuttle back to wherever the opponent is standing.",
+        D:"Plays to space when there's time; shot choices are predictable.",
+        C:"Uses length and tight net shots to build rallies, but reverts to just-get-it-back under pressure.",
+        B:"Deliberately moves opponents around and picks on weaknesses for most of a game.",
+        A:"Controls how rallies are played — sets traps, and changes the plan mid-game to counter opponents."
+      },
+      tech:{
+        E:"No plan visible — returns the shuttle straight back to the opponent.",
+        D:"Plays to space when there's time; shot choices are predictable.",
+        C:"Builds simple patterns (good length, tight net shots) in rallies, but abandons them under pressure.",
+        B:"Consistently moves opponents around and plays into gaps in match play; varies pace and length.",
+        A:"Controls rallies — creates and exploits weaknesses, disguises intent, adapts the plan to the opponent."
+      }
     }},
   { key:"accuracy", name:"Accuracy",
-    desc:"Low hitting-error rate and accuracy in hitting direction. Tip: count errors over 10–20 shots rather than judging by feel.",
+    desc:{
+      club:"Low hitting-error rate and accuracy in hitting direction. Tip: count errors over 10–20 shots rather than judging by feel.",
+      tech:"Low hitting-error rate and accuracy in hitting direction. Tip: count errors over 10–20 shots rather than judging by feel."
+    },
     anchors:{
-      E:"Most rallies end on their unforced error — 5 or more misses per 10 shots.",
-      D:"Frequent hitting errors, around 3–4 per 10 shots; direction largely untargeted.",
-      C:"Around 2 errors per 10 shots; can aim for half-court zones.",
-      B:"About 1 error per 10 shots; hits targeted zones under match pressure.",
-      A:"Rarely misses — roughly 1 in 20 or better; pinpoint length and direction even when stretched."
+      club:{
+        E:"Most rallies end on their unforced error — 5 or more misses per 10 shots.",
+        D:"Frequent hitting errors, around 3–4 per 10 shots; direction largely untargeted.",
+        C:"Around 2 errors per 10 shots; can aim for half-court zones.",
+        B:"About 1 error per 10 shots; hits targeted zones under match pressure.",
+        A:"Rarely misses — roughly 1 in 20 or better; the shuttle goes where they intended, even when stretched."
+      },
+      tech:{
+        E:"Most rallies end on their unforced error — 5 or more misses per 10 shots.",
+        D:"Frequent hitting errors, around 3–4 per 10 shots; direction largely untargeted.",
+        C:"Around 2 errors per 10 shots; can aim for half-court zones.",
+        B:"About 1 error per 10 shots; hits targeted zones under match pressure.",
+        A:"Rarely misses — roughly 1 in 20 or better; pinpoint length and direction even when stretched."
+      }
     }}
 ];
 // Displayed low to high so the rater climbs the ladder and stops
@@ -200,15 +276,28 @@ const BANDS = [
   { g:"A", lo:9, color:"#15803d" }
 ];
 const GRADES = [
-  { g:"A", range:[9,10], color:"#15803d", label:"Consistent under pressure, and adapts or disguises at pace." },
-  { g:"B", range:[7,8],  color:"#4d7c0f", label:"Consistent in competitive play; occasional lapses." },
-  { g:"C", range:[5,6],  color:"#b45309", label:"Executes in normal rallies; breaks down under pressure or at pace." },
-  { g:"D", range:[3,4],  color:"#c2410c", label:"Executes in drills and feeds; breaks down in rallies." },
-  { g:"E", range:[1,2],  color:"#b91c1c", label:"Can't yet execute the technique, even unpressured." }
+  { g:"A", range:[9,10], color:"#15803d", label:{
+      club:"Among the strongest at club night; their game holds up under any pressure we can apply.",
+      tech:"Consistent under pressure, and adapts or disguises at pace." }},
+  { g:"B", range:[7,8],  color:"#4d7c0f", label:{
+      club:"Effective in games; only the top players expose them.",
+      tech:"Consistent in competitive play; occasional lapses." }},
+  { g:"C", range:[5,6],  color:"#b45309", label:{
+      club:"Solid in normal rallies; breaks down when the pace lifts.",
+      tech:"Executes in normal rallies; breaks down under pressure or at pace." }},
+  { g:"D", range:[3,4],  color:"#c2410c", label:{
+      club:"Works when given time; breaks down in live rallies.",
+      tech:"Executes in drills and feeds; breaks down in rallies." }},
+  { g:"E", range:[1,2],  color:"#b91c1c", label:{
+      club:"Still learning the basics of the game.",
+      tech:"Can't yet execute the technique, even unpressured." }}
 ];
 const KEY = "badminton-grading-roster-v1";
+const MODEKEY = "badminton-grading-rubric-v1";
 
 const blank = () => Object.fromEntries(SKILLS.map(s => [s.key, null]));
+let mode = "club";
+try { if (localStorage.getItem(MODEKEY) === "tech") mode = "tech"; } catch {}
 let scores = blank();   // final 1–10 score per skill
 let bands = blank();    // chosen band letter, before low/high is picked
 let roster = load();
@@ -233,6 +322,7 @@ function sanitize(data) {
       name: (typeof p.name === "string" && p.name.trim()) ? p.name.trim() : "Unnamed player",
       date: p.date,
       scores: Object.fromEntries(SKILLS.map(s => [s.key, p.scores[s.key]])),
+      rubric: MODES[p.rubric] ? p.rubric : undefined,
       total, avg: Number(avg.toFixed(1)), grade: gradeFor(avg).g
     });
   }
@@ -266,6 +356,16 @@ function updateTabLabel() {
   document.getElementById("tab-roster").textContent = roster.length ? `Roster (${roster.length})` : "Roster";
 }
 
+function setMode(m) {
+  if (!MODES[m]) return;
+  mode = m;
+  try { localStorage.setItem(MODEKEY, m); } catch {}
+  document.getElementById("mode-club").classList.toggle("on", m === "club");
+  document.getElementById("mode-tech").classList.toggle("on", m === "tech");
+  document.getElementById("scalehint").textContent = MODES[m].hint;
+  renderCards(); renderBands();
+}
+
 function renderCards() {
   const el = document.getElementById("cards");
   el.innerHTML = SKILLS.map(s => `
@@ -274,12 +374,12 @@ function renderCards() {
         <h2>${s.name}</h2>
         <button class="info" onclick="toggleDesc('${s.key}')" id="info-${s.key}">What's this?</button>
       </div>
-      <p class="desc" id="desc-${s.key}">${s.desc}</p>
+      <p class="desc" id="desc-${s.key}">${s.desc[mode]}</p>
       <div class="bandopts" id="bands-${s.key}">
         ${BANDS.map(b => `
           <button class="bandopt" onclick="setBand('${s.key}','${b.g}')" data-g="${b.g}">
             <span class="chip" style="background:${b.color}">${b.g}</span>
-            <span class="txt">${s.anchors[b.g]}</span>
+            <span class="txt">${s.anchors[mode][b.g]}</span>
           </button>`).join("")}
       </div>
       <div class="fine hidden" id="fine-${s.key}"></div>
@@ -359,6 +459,7 @@ function save() {
     name: (document.getElementById("pname").value.trim() || "Unnamed player"),
     date: new Date().toISOString(),
     scores: {...scores},
+    rubric: mode,
     total: sum, avg: Number(avg.toFixed(1)), grade: grade.g
   });
   persist(); clearForm(); updateTabLabel();
@@ -385,6 +486,7 @@ function renderRoster() {
       </div>
       ${ex ? `<div class="pdetail">
         ${SKILLS.map(s=>`<div class="r"><span>${s.name}</span><b>${p.scores[s.key]} · ${gradeFor(p.scores[s.key]).g}</b></div>`).join("")}
+        ${p.rubric ? `<div class="r"><span>Scale</span><b>${MODES[p.rubric].name}</b></div>` : ""}
         <button class="del" onclick="del(${p.id})">Delete</button>
       </div>` : ""}
     </div>`;
@@ -400,11 +502,11 @@ function del(id) {
 function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 function csv() {
-  const head = "Name,Date,Grip,Footwork,Positioning,Tactics,Accuracy,Total,Avg,Grade";
+  const head = "Name,Date,Grip,Footwork,Positioning,Tactics,Accuracy,Total,Avg,Grade,Scale";
   const rows = roster.map(p => [
     `"${p.name.replace(/"/g,'""')}"`, new Date(p.date).toLocaleDateString(),
     p.scores.grip, p.scores.footwork, p.scores.positioning, p.scores.tactics, p.scores.accuracy,
-    p.total, p.avg, p.grade
+    p.total, p.avg, p.grade, p.rubric ? MODES[p.rubric].name : ""
   ].join(","));
   return [head, ...rows].join("\n");
 }
@@ -444,11 +546,12 @@ function importBackup(input) {
   reader.readAsText(file);
 }
 
-// build bands reference
-document.getElementById("bandlist").innerHTML = GRADES.map(x =>
-  `<div class="band"><div class="g" style="background:${x.color}">${x.g}</div><span class="t"><b>${x.range[0]}–${x.range[1]}:</b> ${x.label}</span></div>`).join("");
+function renderBands() {
+  document.getElementById("bandlist").innerHTML = GRADES.map(x =>
+    `<div class="band"><div class="g" style="background:${x.color}">${x.g}</div><span class="t"><b>${x.range[0]}–${x.range[1]}:</b> ${x.label[mode]}</span></div>`).join("");
+}
 
-renderCards(); refreshBar(); updateTabLabel();
+setMode(mode); refreshBar(); updateTabLabel();
 </script>
 </body>
 </html>
