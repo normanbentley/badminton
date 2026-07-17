@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#166534">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Grading">
+<title>Player Grading</title>
+<style>
+  :root {
+    --accent: #166534;
+    --bg: #fafaf9;
+    --card: #ffffff;
+    --line: #e7e5e4;
+    --ink: #1c1917;
+    --mut: #78716c;
+    --faint: #f5f5f4;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: calc(120px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  header { padding: 20px 16px 8px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  header p { margin: 4px 0 0; font-size: 14px; color: var(--mut); }
+  .tabs { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 6px 16px 8px; }
+  .tabrow { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #e7e5e4; border-radius: 12px; padding: 4px; }
+  .tabrow button { border: 0; background: transparent; padding: 8px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--mut); cursor: pointer; }
+  .tabrow button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  main { padding: 0 16px; }
+  input.name { width: 100%; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 12px 16px; font-size: 16px; outline: none; margin-bottom: 12px; }
+  input.name:focus { border-color: #a8a29e; }
+  .card { border: 1px solid var(--line); background: var(--card); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+  .card .top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; }
+  .card h2 { font-size: 16px; font-weight: 600; margin: 0; }
+  .info { border: 0; background: transparent; color: var(--mut); font-size: 12px; font-weight: 500; padding: 4px 8px; border-radius: 999px; cursor: pointer; }
+  .desc { padding: 4px 16px 0; font-size: 14px; line-height: 1.35; color: var(--mut); display: none; }
+  .desc.show { display: block; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 12px; }
+  .grid button { height: 44px; border: 0; border-radius: 10px; font-size: 16px; font-weight: 600; background: var(--faint); color: #57534e; cursor: pointer; transition: transform .05s; }
+  .grid button:active { transform: scale(0.94); }
+  .grid button.on { background: var(--accent); color: #fff; }
+  details.bands { border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 12px 16px; font-size: 14px; }
+  details.bands summary { cursor: pointer; font-weight: 600; color: #44403c; }
+  .band { display: flex; gap: 8px; margin-top: 8px; align-items: flex-start; }
+  .band .g { width: 20px; height: 20px; border-radius: 5px; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; margin-top: 1px; }
+  .band span.t { color: var(--mut); }
+  .band span.t b { color: #44403c; }
+  .barwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; border-top: 1px solid var(--line); background: rgba(255,255,255,.96); backdrop-filter: blur(6px); padding-bottom: env(safe-area-inset-bottom); }
+  .bar { max-width: 480px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+  .gchip { width: 48px; height: 48px; border-radius: 12px; color: #fff; font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; background: #d6d3d1; }
+  .meta { line-height: 1.2; }
+  .meta .l1 { font-size: 14px; font-weight: 600; }
+  .meta .l2 { font-size: 12px; color: var(--mut); }
+  .btn { border: 0; border-radius: 12px; font-weight: 700; cursor: pointer; }
+  .save { margin-left: auto; background: var(--accent); color: #fff; padding: 14px 20px; font-size: 14px; }
+  .save:disabled { opacity: .4; }
+  .clear { border: 1px solid var(--line); background: #fff; color: #57534e; padding: 14px 12px; font-size: 14px; font-weight: 600; }
+  .empty { margin-top: 24px; border: 1px dashed #d6d3d1; background: #fff; border-radius: 16px; padding: 40px 16px; text-align: center; }
+  .empty p { margin: 0; }
+  .empty .b { font-weight: 600; color: #57534e; }
+  .empty .s { font-size: 14px; color: #a8a29e; margin-top: 4px; }
+  .exports { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .exports button { border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .prow { border: 1px solid var(--line); background: #fff; border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
+  .phead { display: flex; align-items: center; gap: 12px; padding: 12px; cursor: pointer; }
+  .phead .g { width: 44px; height: 44px; border-radius: 12px; color: #fff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .phead .n { flex: 1; min-width: 0; }
+  .phead .n b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .phead .n small { font-size: 12px; color: #a8a29e; }
+  .phead .ch { color: #d6d3d1; }
+  .pdetail { border-top: 1px solid #f5f5f4; padding: 8px 12px; }
+  .pdetail .r { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+  .pdetail .r span { color: var(--mut); }
+  .pdetail .r b { font-weight: 600; }
+  .del { margin-top: 8px; width: 100%; border: 0; background: #fef2f2; color: #dc2626; border-radius: 10px; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .hidden { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dot"></span>Player Grading</h1>
+    <p>Tap a score for each skill. Grade is worked out for you.</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tabrow">
+      <button id="tab-grade" class="on" onclick="setTab('grade')">Grade a player</button>
+      <button id="tab-roster" onclick="setTab('roster')">Roster</button>
+    </div>
+  </div>
+
+  <main id="view-grade">
+    <input class="name" id="pname" placeholder="Player name (optional)" autocomplete="off">
+    <div id="cards"></div>
+    <details class="bands">
+      <summary>Grade bands (A–E)</summary>
+      <div id="bandlist"></div>
+    </details>
+  </main>
+
+  <main id="view-roster" class="hidden">
+    <div class="exports" id="exports">
+      <button onclick="copyCSV()">Copy CSV</button>
+      <button onclick="downloadCSV()">Download backup</button>
+    </div>
+    <div id="rosterlist"></div>
+  </main>
+</div>
+
+<div class="barwrap" id="barwrap">
+  <div class="bar">
+    <div class="gchip" id="gchip">–</div>
+    <div class="meta">
+      <div class="l1" id="metaL1">No scores yet</div>
+      <div class="l2" id="metaL2">Rate all 5 skills to save</div>
+    </div>
+    <button class="btn save" id="saveBtn" onclick="save()" disabled>Save</button>
+    <button class="btn clear hidden" id="clearBtn" onclick="clearForm()">Clear</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SKILLS = [
+  { key:"grip", name:"Grip / Stroke", desc:"Uses correct forehand, backhand and front-court grip. Flexible with grip changes for every situation." },
+  { key:"footwork", name:"Footwork", desc:"Uses chassé steps around the court. Stops when playing a shot without stepping beyond it, uses rotation on overhead shots, and isn't flat-footed when waiting for a return." },
+  { key:"positioning", name:"Positioning", desc:"Correct position when serving and receiving. Base position correct for both attacking and defensive play. Uses correct rotation to cover partner and anticipate the return." },
+  { key:"tactics", name:"Tactics", desc:"Court awareness. Plays shots of correct length and tight to the net to exploit the full court. Actively plays into gaps and moves opponents around." },
+  { key:"accuracy", name:"Accuracy", desc:"Low hitting-error rate and accuracy in hitting direction." }
+];
+const GRADES = [
+  { g:"A", range:[9,10], color:"#15803d", label:"Full command of all aspects of the game." },
+  { g:"B", range:[7,8],  color:"#4d7c0f", label:"Technically correct; less accurate than A." },
+  { g:"C", range:[5,6],  color:"#b45309", label:"Some technical deficiencies; higher error rate than B." },
+  { g:"D", range:[3,4],  color:"#c2410c", label:"Technical deficiencies; lacking court awareness." },
+  { g:"E", range:[1,2],  color:"#b91c1c", label:"Basic beginner level." }
+];
+const KEY = "badminton-grading-roster-v1";
+
+let scores = { grip:null, footwork:null, positioning:null, tactics:null, accuracy:null };
+let roster = load();
+let expandedId = null;
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(roster)); }
+  catch { toast("Couldn't save — storage full or blocked"); }
+}
+function gradeFor(avg) {
+  if (avg == null) return null;
+  const r = Math.round(avg);
+  return GRADES.find(x => r >= x.range[0] && r <= x.range[1]) || GRADES[GRADES.length-1];
+}
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1600);
+}
+
+function setTab(tab) {
+  document.getElementById("tab-grade").classList.toggle("on", tab==="grade");
+  document.getElementById("tab-roster").classList.toggle("on", tab==="roster");
+  document.getElementById("view-grade").classList.toggle("hidden", tab!=="grade");
+  document.getElementById("view-roster").classList.toggle("hidden", tab!=="roster");
+  document.getElementById("barwrap").classList.toggle("hidden", tab!=="grade");
+  if (tab==="roster") renderRoster();
+  updateTabLabel();
+}
+function updateTabLabel() {
+  document.getElementById("tab-roster").textContent = roster.length ? `Roster (${roster.length})` : "Roster";
+}
+
+function renderCards() {
+  const el = document.getElementById("cards");
+  el.innerHTML = SKILLS.map(s => `
+    <section class="card">
+      <div class="top">
+        <h2>${s.name}</h2>
+        <button class="info" onclick="toggleDesc('${s.key}')" id="info-${s.key}">What's this?</button>
+      </div>
+      <p class="desc" id="desc-${s.key}">${s.desc}</p>
+      <div class="grid" id="grid-${s.key}">
+        ${Array.from({length:10},(_,i)=>i+1).map(n =>
+          `<button onclick="setScore('${s.key}',${n})" data-n="${n}">${n}</button>`).join("")}
+      </div>
+    </section>`).join("");
+  refreshGrids();
+}
+function toggleDesc(k) {
+  const d = document.getElementById("desc-"+k);
+  const b = document.getElementById("info-"+k);
+  const show = d.classList.toggle("show");
+  b.textContent = show ? "Hide" : "What's this?";
+}
+function setScore(k, n) {
+  scores[k] = (scores[k] === n) ? null : n;
+  refreshGrids(); refreshBar();
+}
+function refreshGrids() {
+  SKILLS.forEach(s => {
+    const g = document.getElementById("grid-"+s.key);
+    if (!g) return;
+    [...g.children].forEach(btn => {
+      btn.classList.toggle("on", scores[s.key] === Number(btn.dataset.n));
+    });
+  });
+}
+function refreshBar() {
+  const rated = SKILLS.filter(s => scores[s.key] != null);
+  const sum = rated.reduce((a,s)=>a+scores[s.key],0);
+  const complete = rated.length === SKILLS.length;
+  const avg = complete ? sum/SKILLS.length : (rated.length ? sum/rated.length : null);
+  const grade = gradeFor(avg);
+  const chip = document.getElementById("gchip");
+  chip.textContent = grade ? grade.g : "–";
+  chip.style.background = grade ? grade.color : "#d6d3d1";
+  document.getElementById("metaL1").textContent = complete ? `Grade ${grade.g}` : (rated.length ? `${rated.length}/5 rated` : "No scores yet");
+  document.getElementById("metaL2").textContent = complete
+    ? `avg ${avg.toFixed(1)} · total ${sum}`
+    : (rated.length ? `running avg ${avg.toFixed(1)}` : "Rate all 5 skills to save");
+  document.getElementById("saveBtn").disabled = !complete;
+  document.getElementById("clearBtn").classList.toggle("hidden", rated.length === 0);
+}
+function clearForm() {
+  scores = { grip:null, footwork:null, positioning:null, tactics:null, accuracy:null };
+  document.getElementById("pname").value = "";
+  refreshGrids(); refreshBar();
+}
+function save() {
+  const rated = SKILLS.filter(s => scores[s.key] != null);
+  if (rated.length !== SKILLS.length) return;
+  const sum = rated.reduce((a,s)=>a+scores[s.key],0);
+  const avg = sum/SKILLS.length;
+  const grade = gradeFor(avg);
+  roster.unshift({
+    id: Date.now(),
+    name: (document.getElementById("pname").value.trim() || "Unnamed player"),
+    date: new Date().toISOString(),
+    scores: {...scores},
+    total: sum, avg: Number(avg.toFixed(1)), grade: grade.g
+  });
+  persist(); clearForm(); updateTabLabel();
+  toast("Saved to roster"); setTab("roster");
+}
+
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString(undefined,{day:"numeric",month:"short"});
+}
+function renderRoster() {
+  const el = document.getElementById("rosterlist");
+  document.getElementById("exports").style.display = roster.length ? "grid" : "none";
+  if (!roster.length) {
+    el.innerHTML = `<div class="empty"><p class="b">No players graded yet</p><p class="s">Grade a player and save to build your roster.</p></div>`;
+    return;
+  }
+  el.innerHTML = roster.map(p => {
+    const gc = GRADES.find(x => x.g === p.grade);
+    const ex = expandedId === p.id;
+    return `<div class="prow">
+      <div class="phead" onclick="toggleExpand(${p.id})">
+        <div class="g" style="background:${gc.color}">${p.grade}</div>
+        <div class="n"><b>${escapeHtml(p.name)}</b><small>${fmtDate(p.date)} · avg ${p.avg} · total ${p.total}</small></div>
+        <div class="ch">${ex ? "▲" : "▼"}</div>
+      </div>
+      ${ex ? `<div class="pdetail">
+        ${SKILLS.map(s=>`<div class="r"><span>${s.name}</span><b>${p.scores[s.key]}</b></div>`).join("")}
+        <button class="del" onclick="del(${p.id})">Delete</button>
+      </div>` : ""}
+    </div>`;
+  }).join("");
+}
+function toggleExpand(id) { expandedId = (expandedId === id) ? null : id; renderRoster(); }
+function del(id) { roster = roster.filter(p => p.id !== id); persist(); updateTabLabel(); renderRoster(); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function csv() {
+  const head = "Name,Date,Grip,Footwork,Positioning,Tactics,Accuracy,Total,Avg,Grade";
+  const rows = roster.map(p => [
+    `"${p.name.replace(/"/g,'""')}"`, new Date(p.date).toLocaleDateString(),
+    p.scores.grip, p.scores.footwork, p.scores.positioning, p.scores.tactics, p.scores.accuracy,
+    p.total, p.avg, p.grade
+  ].join(","));
+  return [head, ...rows].join("\n");
+}
+function copyCSV() {
+  if (!roster.length) return;
+  const text = csv();
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(()=>toast("Roster copied")).catch(()=>toast("Copy failed"));
+  else toast("Copy not available");
+}
+function downloadCSV() {
+  if (!roster.length) return;
+  const blob = new Blob([csv()], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `player-grades-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  toast("Backup downloaded");
+}
+
+// build bands reference
+document.getElementById("bandlist").innerHTML = GRADES.map(x =>
+  `<div class="band"><div class="g" style="background:${x.color}">${x.g}</div><span class="t"><b>${x.range[0]}–${x.range[1]}:</b> ${x.label}</span></div>`).join("");
+
+renderCards(); refreshBar(); updateTabLabel();
+</script>
+</body>
+</html>
