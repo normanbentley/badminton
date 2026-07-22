@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#166534">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Coach">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23166534'/%3E%3Cpath d='M26 40 L15 12 Q32 4 49 12 L38 40 Q32 43 26 40 Z' fill='white'/%3E%3Cpath d='M29 39 L24 9 M35 39 L40 9' stroke='%23166534' stroke-width='3' fill='none'/%3E%3Crect x='24' y='44' width='16' height='11' rx='5.5' fill='white'/%3E%3C/svg%3E">
+<title>Session Coach</title>
+<style>
+  :root {
+    --accent: #166534;
+    --bg: #fafaf9;
+    --card: #ffffff;
+    --line: #e7e5e4;
+    --ink: #1c1917;
+    --mut: #78716c;
+    --faint: #f5f5f4;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: calc(120px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  header { padding: 20px 16px 8px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  .back { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--mut); text-decoration: none; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; }
+  header p { margin: 4px 0 0; font-size: 14px; color: var(--mut); }
+  .tabs { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 6px 16px 8px; }
+  .tabrow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; background: #e7e5e4; border-radius: 12px; padding: 4px; }
+  .tabrow button { border: 0; background: transparent; padding: 8px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--mut); cursor: pointer; }
+  .tabrow button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  main { padding: 0 16px; }
+  .card { border: 1px solid var(--line); background: var(--card); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+  .card h2 { font-size: 15px; font-weight: 600; margin: 0; padding: 12px 16px 4px; }
+  .steps { padding: 4px 8px 8px; }
+  .step { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+  .step .lab { flex: 1; font-size: 14px; }
+  .step .lab small { display: block; font-size: 12px; color: #a8a29e; }
+  .step button { width: 40px; height: 40px; border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: 20px; font-weight: 600; color: #57534e; cursor: pointer; }
+  .step button:active { background: var(--faint); }
+  .step .val { width: 56px; text-align: center; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .summary { padding: 4px 16px 14px; }
+  .summary .row { display: flex; gap: 8px; padding: 4px 0; font-size: 14px; align-items: baseline; }
+  .summary .row span { color: var(--mut); }
+  .summary .row b { font-weight: 600; }
+  .summary .warn { margin-top: 8px; font-size: 13px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 8px 10px; }
+  .summary .bad { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
+  .tonight { padding: 4px 12px 12px; }
+  .titem { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin-bottom: 6px; background: #fff; }
+  .titem .n { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .titem .n small { display: block; font-weight: 400; font-size: 12px; color: #a8a29e; }
+  .titem button { width: 34px; height: 34px; border: 1px solid var(--line); background: #fff; border-radius: 8px; color: #57534e; font-size: 14px; cursor: pointer; }
+  .titem button.x { color: #dc2626; border-color: #fecaca; }
+  .thint { font-size: 13px; color: #a8a29e; padding: 0 6px 8px; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; color: var(--mut); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .chips button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .drill { border: 1px solid var(--line); background: #fff; border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
+  .dhead { display: flex; align-items: center; gap: 10px; padding: 12px; cursor: pointer; }
+  .dhead .n { flex: 1; min-width: 0; }
+  .dhead .n b { display: block; font-size: 15px; font-weight: 600; }
+  .dhead .n small { font-size: 12px; color: #a8a29e; }
+  .dhead .add { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .dhead .add.in { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .dbody { border-top: 1px solid var(--faint); padding: 10px 14px 14px; font-size: 14px; line-height: 1.4; color: #44403c; }
+  .dbody .sec { margin-top: 8px; }
+  .dbody .sec b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #a8a29e; margin-bottom: 2px; font-weight: 700; }
+  .dbody ul { margin: 2px 0 0; padding-left: 18px; }
+  .dbody li { margin: 2px 0; }
+  .lv { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: 1px; }
+  .lv i { font-style: normal; font-size: 10px; font-weight: 700; color: #fff; background: #a8a29e; border-radius: 4px; padding: 1px 4px; }
+  .lv i.B { background: #0369a1; } .lv i.I { background: #b45309; } .lv i.S { background: #15803d; }
+  .runcard { border: 1px solid var(--line); background: #fff; border-radius: 20px; padding: 20px 16px; text-align: center; margin-bottom: 12px; }
+  .runcard .blab { font-size: 16px; font-weight: 700; }
+  .runcard .bsub { font-size: 13px; color: var(--mut); margin-top: 2px; }
+  .bigtime { font-size: 72px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 8px 0 4px; }
+  .bigtime.paused { color: #a8a29e; }
+  .bigtime.low { color: #dc2626; }
+  .bprog { font-size: 13px; color: #a8a29e; }
+  .nextup { font-size: 13px; color: var(--mut); border-top: 1px solid var(--faint); margin-top: 12px; padding-top: 10px; }
+  .nextup b { font-weight: 600; color: #44403c; }
+  .empty { margin-top: 24px; border: 1px dashed #d6d3d1; background: #fff; border-radius: 16px; padding: 40px 16px; text-align: center; }
+  .empty p { margin: 0; }
+  .empty .b { font-weight: 600; color: #57534e; }
+  .empty .s { font-size: 14px; color: #a8a29e; margin-top: 4px; }
+  .barwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; border-top: 1px solid var(--line); background: rgba(255,255,255,.96); backdrop-filter: blur(6px); padding-bottom: env(safe-area-inset-bottom); }
+  .bar { max-width: 480px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+  .gchip { min-width: 48px; height: 48px; border-radius: 12px; color: #fff; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; background: #d6d3d1; padding: 0 6px; font-variant-numeric: tabular-nums; }
+  .meta { line-height: 1.2; flex: 1; min-width: 0; }
+  .meta .l1 { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta .l2 { font-size: 12px; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .btn { border: 0; border-radius: 12px; font-weight: 700; cursor: pointer; }
+  .go { background: var(--accent); color: #fff; padding: 14px 20px; font-size: 14px; flex: 0 0 auto; }
+  .go:disabled { opacity: .4; }
+  .ctl { border: 1px solid var(--line); background: #fff; color: #57534e; padding: 13px 12px; font-size: 14px; font-weight: 600; flex: 0 0 auto; }
+  .ctl.end { color: #dc2626; border-color: #fecaca; }
+  .toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .hidden { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dot"></span>Session Coach<a class="back hidden" id="backlink" href="../">All apps</a></h1>
+    <p>Set tonight's numbers, pick drills, then run the rotation timer courtside.</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tabrow">
+      <button id="tab-plan" class="on" onclick="setTab('plan')">Plan</button>
+      <button id="tab-run" onclick="setTab('run')">Run</button>
+      <button id="tab-drills" onclick="setTab('drills')">Drills</button>
+    </div>
+  </div>
+
+  <main id="view-plan">
+    <section class="card">
+      <h2>Tonight's numbers</h2>
+      <div class="steps" id="steps"></div>
+    </section>
+    <section class="card">
+      <h2>The rotation</h2>
+      <div class="summary" id="summary"></div>
+    </section>
+    <section class="card">
+      <h2>Tonight's drills</h2>
+      <div class="tonight" id="tonight"></div>
+    </section>
+  </main>
+
+  <main id="view-run" class="hidden"></main>
+
+  <main id="view-drills" class="hidden">
+    <div class="chips" id="catchips"></div>
+    <div class="chips" id="lvchips"></div>
+    <div id="drilllist"></div>
+  </main>
+</div>
+
+<div class="barwrap"><div class="bar" id="bar"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// The routine this app plans: some courts are "drill courts" where a coach
+// pulls a small group out for focused work; everyone else free-plays on the
+// remaining "game courts". Groups rotate through the drill courts until every
+// kid has been coached, with warm-up/warm-down bookending the session.
+const CATS = {
+  warmup: "Warm-up", footwork: "Footwork", strokes: "Strokes",
+  net: "Net", serve: "Serving", games: "Games", fun: "Fun"
+};
+const LEVELS = { B: "Beginner", I: "Improver", S: "Strong" };
+
+// Drill library. min = suggested minutes with one group; lv = which levels it
+// suits. Every drill carries an easier/harder variation so the same drill can
+// run for a weaker or stronger group — that's the mixed-levels strategy.
+const DRILLS = [
+  { key:"lines", name:"Court-line runs", cat:"warmup", lv:["B","I","S"], min:5, need:"Nothing",
+    setup:"Everyone on the back line, facing the net.",
+    run:"Coach calls a line — 'short service line!', 'net!' — kids chassé to touch it and return. Keep the calls coming for 3–4 minutes.",
+    pts:["Side-steps, not crossed feet","Stay low with knees bent","Touch the line with your hand"],
+    easier:"Jog instead of chassé.", harder:"Racquet in hand; finish every run with a shadow lunge." },
+  { key:"scramble", name:"Shuttle scramble", cat:"warmup", lv:["B","I"], min:5, need:"20+ shuttles, one hoop or box per team",
+    setup:"Scatter shuttles over the court. Teams of 3–4 in the corners, each with a hoop.",
+    run:"On go, kids fetch one shuttle at a time back to their hoop. Most shuttles when the court is empty wins.",
+    pts:["Bend the knees to pick up, don't stoop","Quick small steps","Heads up — don't collide"],
+    easier:"Fast walking only.", harder:"Carry each shuttle back balanced on the racquet face." },
+  { key:"mirror", name:"Mirror moves", cat:"warmup", lv:["B","I","S"], min:5, need:"Nothing",
+    setup:"Pairs face each other a couple of metres apart.",
+    run:"The leader chassés, lunges and jumps around their space; the partner mirrors everything. 30 seconds, then swap.",
+    pts:["Split-step before each move","Stay on the toes","Racquet arm up as if ready"],
+    easier:"Side-to-side steps only.", harder:"Add jump-smash and dive-lunge shadows." },
+  { key:"keepup", name:"Racquet keep-ups", cat:"warmup", lv:["B","I"], min:4, need:"Shuttle and racquet each",
+    setup:"A shuttle and racquet per kid, spread out anywhere.",
+    run:"How many keep-ups in 60 seconds? Two attempts, best score counts.",
+    pts:["Flat strings facing the ceiling","Soft taps, not hits","Move the feet under the shuttle"],
+    easier:"Use a balloon.", harder:"Alternate forehand and backhand faces every tap." },
+  { key:"coachsays", name:"Coach says", cat:"warmup", lv:["B"], min:5, need:"Nothing",
+    setup:"Everyone spread out facing the coach.",
+    run:"Simon-says with badminton actions: split-step, lunge, chassé left, jump-smash shadow. No 'coach says' — anyone who moves is out for 5 star jumps.",
+    pts:["Demand quality actions, not token ones","Speed up the calls as they warm up"],
+    easier:"No eliminations — just play.", harder:"Chain two actions per call: 'split-step then lunge left'." },
+
+  { key:"corners", name:"Six-corner shadow", cat:"footwork", lv:["I","S"], min:8, need:"Nothing",
+    setup:"One kid per half-court standing at their base; coach at the net facing them.",
+    run:"Coach points to a corner; kids split-step, travel, shadow the shot and recover to base. Work 30–40 seconds, rest while the next pair goes.",
+    pts:["Split-step the moment the coach points","Lunge with the racquet-side leg","Get back to base before the next point"],
+    easier:"Front two and back two corners only.", harder:"Faster calls, and a full racquet swing at every corner." },
+  { key:"fan", name:"Shuttle fan runs", cat:"footwork", lv:["B","I","S"], min:8, need:"5 shuttles per kid going",
+    setup:"Five shuttles spread along the net; kid starts on the back line, centre.",
+    run:"Run in, bring one shuttle back to the back line at a time. Time each kid; rest between turns while others go.",
+    pts:["Low pick-up with bent knees","Push off hard out of the turn","Pace it — don't die at shuttle three"],
+    easier:"Three shuttles.", harder:"Carry each shuttle on the racquet face." },
+  { key:"splitstep", name:"Split-step reaction", cat:"footwork", lv:["B","I","S"], min:6, need:"Nothing",
+    setup:"Kids in a line along the service line facing the coach.",
+    run:"Coach claps, then points left, right or forward. Kids split-step on the clap and push off in the pointed direction, then recover.",
+    pts:["Land toes-first with a wide base","Push off the outside foot","Small hop, not a big jump"],
+    easier:"Longer pause between clap and point.", harder:"Point a second direction before they finish recovering." },
+
+  { key:"lift", name:"Lunge and lift", cat:"strokes", lv:["B","I"], min:8, need:"Box of shuttles",
+    setup:"Coach at the net with shuttles; kid starts mid-court.",
+    run:"Coach hand-feeds low at the net; kid lunges, lifts high to the back tram and recovers to base. 8 feeds each, then rotate the group.",
+    pts:["Reach with the racquet-side leg","Long swing from knee height up","Recover to base after every shot"],
+    easier:"Kid starts closer to the net; feed slower.", harder:"Alternate forehand and backhand net corners." },
+  { key:"clear", name:"Overhead clear from feed", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, 2 cones for the target zone",
+    setup:"Coach feeds high from mid-court; kid waits at the back. Cone off a back-tram target zone on the far side.",
+    run:"Kid clears each feed into the target zone. 8 each, rotate, count zone hits out loud.",
+    pts:["Turn side-on, non-racquet arm up","Hit it high and in front of you","Full follow-through"],
+    easier:"Shorter hand feed, target is anywhere past the doubles service line.", harder:"Alternate straight and cross-court clears." },
+  { key:"drop", name:"Clear–drop ladder", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, cones in the front court",
+    setup:"Coach feeds high serves; cones mark a front-court target either side.",
+    run:"Kid alternates a clear then a drop shot at the cones. 8 feeds each, rotate.",
+    pts:["Same preparation for both shots","Slow the strings for the drop","Drop travels down, not flat"],
+    easier:"All drops, no alternating.", harder:"Coach calls 'clear' or 'drop' late, after the feed is up." },
+  { key:"smash", name:"Smash from feed", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, 2 cones mid-court",
+    setup:"Coach feeds a high mid-court feed; two cones mark the smash target corridor.",
+    run:"Kid smashes each feed between the cones, then resets to ready position. 6 each, rotate often — smashing is tiring.",
+    pts:["Contact in front of the body","Hit down steeply, not far","Snap and follow through, then racquet back up"],
+    easier:"Standing smash from a close, friendly feed.", harder:"Smash, then sprint in to kill a second feed at the net." },
+  { key:"drive", name:"Drive rally pairs", cat:"strokes", lv:["I","S"], min:6, need:"A shuttle per pair",
+    setup:"Pairs face each other mid-court across the net.",
+    run:"Keep a flat drive rally going as long as possible. Best streak out of three attempts wins.",
+    pts:["Racquet up between every shot","Short, punchy swing","Strings facing where you want it to go"],
+    easier:"Allow a gentle arc over the net.", harder:"Backhand drives only." },
+
+  { key:"hairpin", name:"Tight net shots", cat:"net", lv:["B","I","S"], min:7, need:"Box of shuttles",
+    setup:"Kid in the front court; coach feeds loose net shots from the other side.",
+    run:"Kid steps in and plays a tight hairpin back over. Score a point if it lands inside the service line. 8 each, rotate.",
+    pts:["Relaxed grip, strings slide under the shuttle","Take it as early and high as you can","Lunge in, don't stand and reach"],
+    easier:"Let them catch the shuttle on the strings and place it over.", harder:"Alternate straight and cross-court net shots." },
+  { key:"netkill", name:"Net-kill reaction", cat:"net", lv:["I","S"], min:6, need:"Box of shuttles",
+    setup:"Kid at the net, racquet up; coach flicks loose feeds just above the tape.",
+    run:"Kid taps each one down for a kill. 8 each, rotate.",
+    pts:["Racquet up before the feed comes","Short tap, no backswing","Don't touch the net — control the follow-through"],
+    easier:"Higher, slower feeds.", harder:"Mix in one tight feed that must be hairpinned instead of killed — they have to read it." },
+  { key:"triangle", name:"Drop–net–lift triangle", cat:"net", lv:["S"], min:8, need:"A shuttle per pair",
+    setup:"Two kids per half-court, one either side of the net.",
+    run:"Fixed pattern: A lifts, B drops, A plays a net shot, B lifts, and it repeats the other way. Keep the pattern alive as long as possible.",
+    pts:["Recover between every shot","Quality beats speed — keep the pattern alive","Tight net shots, deep lifts"],
+    easier:"Coach plays one side of the pattern.", harder:"After six shots the rally goes open — play the point out." },
+
+  { key:"lowserve", name:"Low serve targets", cat:"serve", lv:["B","I","S"], min:7, need:"Shuttles, hoops or cones",
+    setup:"Hoops just beyond the short service line in each box.",
+    run:"10 backhand low serves each at the hoops. Count hits; rotate servers and shuttle collectors.",
+    pts:["Contact below the waist","Push the shuttle, don't hit it","Skim the tape — low beats accurate"],
+    easier:"Bigger target zone, forehand serve allowed.", harder:"Coach holds a racquet a hand above the tape — serve under it." },
+  { key:"highserve", name:"High serve boxes", cat:"serve", lv:["B","I"], min:7, need:"Shuttles, cones for back boxes",
+    setup:"Cone off target boxes in the back trams diagonally opposite the server.",
+    run:"10 forehand high serves each into the box. Count hits; rotate.",
+    pts:["Relaxed, long swing","Weight moves back foot to front","Shuttle should fall steeply, near the back line"],
+    easier:"Target is anywhere behind the doubles service line.", harder:"Back tram only, and alternate which box." },
+  { key:"servepressure", name:"Serve and return pressure", cat:"serve", lv:["S"], min:8, need:"Shuttles",
+    setup:"Server vs returner on a half-court.",
+    run:"Server serves low; returner attacks it; play the point out to a maximum of three shots. Five serves, then swap roles.",
+    pts:["Server: mix in the occasional flick to keep them honest","Returner: racquet up, take the serve early","First three shots decide most rallies"],
+    easier:"Cooperative returns, no point played.", harder:"Full rally, point counts, first to 5." },
+
+  { key:"kotc", name:"King of the court 2v2", cat:"games", lv:["B","I","S"], min:10, need:"Shuttles",
+    setup:"Two pairs on the drill court; coach feeds from the side.",
+    run:"Coach feeds a rally in; play the point. Winning pair stays, coach gives the next feed. First pair to 5 points, then re-mix the pairs.",
+    pts:["Give each game one focus: 'serve low', 'cover your partner'","Feed to the weaker side sometimes — everyone hits"],
+    easier:"Coach feeds friendly, high feeds.", harder:"Losing pair does the next feed as a proper low serve." },
+  { key:"attackdef", name:"Attack vs defence 2v2", cat:"games", lv:["I","S"], min:10, need:"Shuttles",
+    setup:"One pair attacks, one defends, on the drill court.",
+    run:"Attackers may only hit downward or flat; defenders may only lift and block. Coach feeds a lift to start each rally. Swap roles after 5 rallies.",
+    pts:["Defenders: low base, wide stance, racquet in front","Attackers: hit steep, not hard","Attackers stay front-and-back, defenders side-by-side"],
+    easier:"Attackers start closer to the net; softer feeds.", harder:"A defensive winner counts double." },
+  { key:"halfsingles", name:"Half-court singles ladder", cat:"games", lv:["I","S"], min:10, need:"Shuttles",
+    setup:"Split the drill court down the middle: two half-court singles games side by side.",
+    run:"First to 5. Winners play each other, losers play each other, repeat.",
+    pts:["Half-court rewards length — clear deep, drop short","Recover to base between shots"],
+    easier:"Rally to 3; serve anywhere.", harder:"Clears and drops only — no smashing on a half court." },
+  { key:"targets", name:"Target zone doubles", cat:"games", lv:["B","I","S"], min:10, need:"Shuttles, cones",
+    setup:"Normal 2v2 on the drill court, back tram coned off as the bonus zone.",
+    run:"Normal scoring, but a shuttle landing in the bonus zone scores 2. First to 7.",
+    pts:["Rewards length without saying 'hit it deeper'","Call the bonus shots loudly — kids chase them"],
+    easier:"Anywhere behind the doubles service line counts.", harder:"Net kills also score 2 — length or kill, nothing in between." },
+
+  { key:"battleship", name:"Shuttle battleship", cat:"fun", lv:["B","I"], min:8, need:"8 shuttle tubes or tall cones, shuttles",
+    setup:"Each team stands 4 tubes upright on their back tram — their ships.",
+    run:"Teams take turns serving high; knock over all the enemy ships to win.",
+    pts:["It's high-serve practice in disguise — long relaxed swing","Serve from behind the service line, proper technique or it doesn't count"],
+    easier:"Throw the shuttle instead of serving.", harder:"Must serve from inside the service box, backhand serves score double." },
+  { key:"aroundworld", name:"Around the world", cat:"fun", lv:["B","I","S"], min:8, need:"Box of shuttles",
+    setup:"Kids queue at one side; coach feeds from the other side of the net.",
+    run:"Each kid hits one shot then sprints to the back of the queue. Miss and you lose a life; three lives each, last kid standing wins.",
+    pts:["Get back in the queue fast — the drill punishes ball-watching","Watch the feed early, split-step before it"],
+    easier:"Friendly feeds, unlimited lives, just keep it flowing.", harder:"Two shuttles in play at once." }
+];
+
+const SETKEY = "badminton-coach-settings-v1";
+const PLANKEY = "badminton-coach-plan-v1";
+const RUNKEY = "badminton-coach-run-v1";
+
+// S = the numbers the maths runs on. Steppers below edit these.
+const DEFAULTS = { len:120, wu:10, wd:5, kids:16, group:4, courts:4, coached:2, passes:1 };
+const FIELDS = [
+  { k:"len", lab:"Session length", sub:"minutes", step:5, min:30, max:240 },
+  { k:"wu", lab:"Warm-up", sub:"minutes, everyone together", step:5, min:0, max:30 },
+  { k:"wd", lab:"Warm-down", sub:"minutes at the end", step:5, min:0, max:30 },
+  { k:"kids", lab:"Kids tonight", sub:"head count, no names needed", step:1, min:2, max:60 },
+  { k:"group", lab:"Group size", sub:"kids pulled out per drill court", step:1, min:2, max:8 },
+  { k:"courts", lab:"Courts available", sub:"total, drills + games", step:1, min:1, max:8 },
+  { k:"coached", lab:"Drill courts", sub:"courts with a coach running drills", step:1, min:1, max:6 },
+  { k:"passes", lab:"Passes", sub:"times each kid comes through drills", step:1, min:1, max:4 }
+];
+
+let S = { ...DEFAULTS };
+try { const s = JSON.parse(localStorage.getItem(SETKEY)); if (s && typeof s === "object") FIELDS.forEach(f => { if (Number.isInteger(s[f.k])) S[f.k] = Math.min(f.max, Math.max(f.min, s[f.k])); }); } catch {}
+let plan = [];
+try { const p = JSON.parse(localStorage.getItem(PLANKEY)); if (Array.isArray(p)) plan = p.filter(k => DRILLS.some(d => d.key === k)); } catch {}
+let run = null;          // { tl:[{label,sub,mins,drill}], i, endsAt, paused, remaining }
+let catFilter = "all", lvFilter = "all", expandedDrill = null;
+let audio = null, wakeLock = null;
+
+function persistS() { try { localStorage.setItem(SETKEY, JSON.stringify(S)); } catch {} }
+function persistPlan() { try { localStorage.setItem(PLANKEY, JSON.stringify(plan)); } catch {} }
+function persistRun() { try { run ? localStorage.setItem(RUNKEY, JSON.stringify(run)) : localStorage.removeItem(RUNKEY); } catch {} }
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1600);
+}
+
+// The rotation maths. Everything on the Plan tab derives from this.
+function calc() {
+  const groups = Math.ceil(S.kids / S.group);
+  const lastGroup = S.kids - (groups - 1) * S.group;
+  const roundsPerPass = Math.ceil(groups / Math.min(S.coached, groups));
+  const totalRounds = roundsPerPass * S.passes;
+  const drillTime = S.len - S.wu - S.wd;
+  const slot = Math.floor(drillTime / totalRounds);
+  const spare = drillTime - slot * totalRounds;
+  const lastRoundCourts = groups - (roundsPerPass - 1) * Math.min(S.coached, groups);
+  return { groups, lastGroup, roundsPerPass, totalRounds, drillTime, slot, spare, lastRoundCourts,
+           valid: drillTime > 0 && slot >= 1 };
+}
+
+function setTab(tab) {
+  ["plan","run","drills"].forEach(t => {
+    document.getElementById("tab-"+t).classList.toggle("on", t===tab);
+    document.getElementById("view-"+t).classList.toggle("hidden", t!==tab);
+  });
+  setTab.current = tab;
+  if (tab === "plan") renderPlan();
+  if (tab === "run") renderRun();
+  if (tab === "drills") renderDrills();
+  renderBar();
+}
+setTab.current = "plan";
+
+function adjust(k, dir) {
+  const f = FIELDS.find(x => x.k === k);
+  S[k] = Math.min(f.max, Math.max(f.min, S[k] + dir * f.step));
+  // Can't coach on more courts than exist.
+  if (S.coached > S.courts) S.coached = S.courts;
+  persistS(); renderPlan(); renderBar();
+}
+
+function renderPlan() {
+  document.getElementById("steps").innerHTML = FIELDS.map(f => `
+    <div class="step">
+      <div class="lab">${f.lab}<small>${f.sub}</small></div>
+      <button onclick="adjust('${f.k}',-1)" aria-label="decrease">−</button>
+      <div class="val">${S[f.k]}</div>
+      <button onclick="adjust('${f.k}',1)" aria-label="increase">+</button>
+    </div>`).join("");
+
+  const c = calc();
+  const groupsTxt = c.lastGroup === S.group || c.groups === 1
+    ? `${c.groups} group${c.groups===1?"":"s"} of ${Math.min(S.group, S.kids)}`
+    : `${c.groups} groups of ${S.group} (last one has ${c.lastGroup})`;
+  const rows = [
+    ["Groups", groupsTxt],
+    ["Game courts", `${Math.max(0, S.courts - S.coached)} of ${S.courts} — everyone not in drills plays here`],
+    ["Rounds", `${c.totalRounds} × ${c.valid ? c.slot : "–"} min ${S.passes>1 ? `(${S.passes} passes of ${c.roundsPerPass})` : ""}`],
+    ["Per kid", c.valid ? `${S.passes} × ${c.slot} min = ${S.passes*c.slot} min of coaching` : "–"],
+    ["Spare", c.valid ? `${c.spare} min for swap-overs and slippage` : "–"]
+  ];
+  let warn = "";
+  if (!c.valid) warn = `<div class="warn bad">No time left for drills — the warm-up and warm-down don't fit in ${S.len} minutes with ${c.totalRounds} rounds.</div>`;
+  else if (c.slot < 6) warn = `<div class="warn">Rounds of ${c.slot} min are very short. Fewer passes, fewer groups, or a shorter warm-up would give each group more time.</div>`;
+  else if (c.slot > 20 && S.passes === 1) warn = `<div class="warn">Rounds of ${c.slot} min are long for kids. Consider 2 passes — each kid comes through twice for ${Math.floor(c.drillTime/(c.roundsPerPass*2))} min.</div>`;
+  if (c.valid && c.lastRoundCourts < Math.min(S.coached, c.groups)) warn += `<div class="warn">The last round of each pass only fills ${c.lastRoundCourts} of ${S.coached} drill courts — a coach gets a breather.</div>`;
+
+  document.getElementById("summary").innerHTML =
+    rows.map(r => `<div class="row"><span>${r[0]}</span><b>${r[1]}</b></div>`).join("") + warn;
+
+  const t = document.getElementById("tonight");
+  if (!plan.length) {
+    t.innerHTML = `<p class="thint">No drills picked yet — grab some from the Drills tab. Rounds run fine without them; you just won't get the on-screen coaching notes.</p>`;
+  } else {
+    t.innerHTML = plan.map((k, i) => {
+      const d = DRILLS.find(x => x.key === k);
+      return `<div class="titem">
+        <div class="n">${d.name}<small>${CATS[d.cat]} · suits ${d.lv.map(l=>LEVELS[l]).join(", ")}</small></div>
+        ${i>0?`<button onclick="moveDrill(${i},-1)" aria-label="move up">↑</button>`:""}
+        ${i<plan.length-1?`<button onclick="moveDrill(${i},1)" aria-label="move down">↓</button>`:""}
+        <button class="x" onclick="removeDrill(${i})" aria-label="remove">✕</button>
+      </div>`;
+    }).join("") + `<p class="thint">Rounds are split across these in order — with ${plan.length} drill${plan.length===1?"":"s"} over ${c.totalRounds} rounds, coaches switch drill partway through the night.</p>`;
+  }
+}
+
+function addDrill(key) {
+  const i = plan.indexOf(key);
+  if (i >= 0) { plan.splice(i, 1); toast("Removed from tonight"); }
+  else { plan.push(key); toast("Added to tonight"); }
+  persistPlan(); renderDrills(); renderBar();
+}
+function removeDrill(i) { plan.splice(i, 1); persistPlan(); renderPlan(); renderBar(); }
+function moveDrill(i, dir) {
+  const j = i + dir;
+  [plan[i], plan[j]] = [plan[j], plan[i]];
+  persistPlan(); renderPlan();
+}
+
+function renderDrills() {
+  const cats = ["all", ...Object.keys(CATS)];
+  document.getElementById("catchips").innerHTML = cats.map(c =>
+    `<button class="${catFilter===c?"on":""}" onclick="setFilter('cat','${c}')">${c==="all"?"All types":CATS[c]}</button>`).join("");
+  const lvs = ["all", ...Object.keys(LEVELS)];
+  document.getElementById("lvchips").innerHTML = lvs.map(l =>
+    `<button class="${lvFilter===l?"on":""}" onclick="setFilter('lv','${l}')">${l==="all"?"All levels":LEVELS[l]}</button>`).join("");
+
+  const list = DRILLS.filter(d =>
+    (catFilter==="all" || d.cat===catFilter) && (lvFilter==="all" || d.lv.includes(lvFilter)));
+  document.getElementById("drilllist").innerHTML = list.length ? list.map(d => {
+    const inPlan = plan.includes(d.key);
+    const ex = expandedDrill === d.key;
+    return `<div class="drill">
+      <div class="dhead" onclick="toggleDrill('${d.key}')">
+        <div class="n">
+          <b>${d.name}<span class="lv">${d.lv.map(l=>`<i class="${l}">${l}</i>`).join("")}</span></b>
+          <small>${CATS[d.cat]} · ~${d.min} min</small>
+        </div>
+        <button class="add ${inPlan?"in":""}" onclick="event.stopPropagation();addDrill('${d.key}')">${inPlan?"✓ Tonight":"+ Add"}</button>
+      </div>
+      ${ex ? `<div class="dbody">
+        <div class="sec"><b>Needs</b>${d.need}</div>
+        <div class="sec"><b>Setup</b>${d.setup}</div>
+        <div class="sec"><b>Run it</b>${d.run}</div>
+        <div class="sec"><b>Coaching points</b><ul>${d.pts.map(p=>`<li>${p}</li>`).join("")}</ul></div>
+        <div class="sec"><b>Easier</b>${d.easier}</div>
+        <div class="sec"><b>Harder</b>${d.harder}</div>
+      </div>` : ""}
+    </div>`;
+  }).join("") : `<div class="empty"><p class="b">Nothing matches those filters</p><p class="s">Try a different type or level.</p></div>`;
+}
+function setFilter(which, v) {
+  if (which === "cat") catFilter = v; else lvFilter = v;
+  renderDrills();
+}
+function toggleDrill(k) { expandedDrill = expandedDrill === k ? null : k; renderDrills(); }
+
+// ---- Run mode ----
+
+function buildTimeline() {
+  const c = calc();
+  const tl = [];
+  if (S.wu > 0) tl.push({ label:"Warm-up", sub:"Everyone together", mins:S.wu, drill:null });
+  for (let r = 0; r < c.totalRounds; r++) {
+    const drill = plan.length ? plan[Math.floor(r * plan.length / c.totalRounds)] : null;
+    const pass = S.passes > 1 ? ` · pass ${Math.floor(r / c.roundsPerPass) + 1}` : "";
+    tl.push({
+      label:`Drill round ${r+1} of ${c.totalRounds}`,
+      sub:`Pull ${S.group} kids per drill court${pass} · rest play on game courts`,
+      mins:c.slot, drill
+    });
+  }
+  if (S.wd > 0) tl.push({ label:"Warm-down", sub:"Everyone together — stretch, collect shuttles, pack up", mins:S.wd, drill:null });
+  return tl;
+}
+
+function start() {
+  const c = calc();
+  if (!c.valid) { toast("Fix the timings first — see the Plan tab"); return; }
+  const tl = buildTimeline();
+  run = { tl, i:0, endsAt: Date.now() + tl[0].mins*60000, paused:false, remaining:null };
+  persistRun();
+  initAudio(); requestWake();
+  setTab("run");
+}
+function initAudio() {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {}
+}
+function chime(n) {
+  try {
+    if (!audio) return;
+    for (let i = 0; i < n; i++) {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.connect(g); g.connect(audio.destination);
+      o.frequency.value = 880;
+      const t = audio.currentTime + i*0.35;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.4, t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.3);
+      o.start(t); o.stop(t+0.32);
+    }
+  } catch {}
+  try { navigator.vibrate && navigator.vibrate([200,100,200]); } catch {}
+}
+async function requestWake() {
+  try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+}
+function releaseWake() {
+  try { wakeLock && wakeLock.release(); } catch {} wakeLock = null;
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && run) requestWake();
+});
+
+function tick() {
+  if (!run || run.paused) return;
+  const rem = run.endsAt - Date.now();
+  if (rem <= 0) {
+    chime(2);
+    advance(true);
+  } else {
+    updateClock(rem);
+  }
+}
+setInterval(tick, 250);
+
+function advance(auto) {
+  if (!run) return;
+  if (!auto) chime(1);
+  // Carry a small overrun into the next block so the session still ends on time.
+  const overrun = auto ? Math.min(0, run.endsAt - Date.now()) : 0;
+  run.i++;
+  if (run.i >= run.tl.length) { finish(); return; }
+  run.endsAt = Date.now() + run.tl[run.i].mins*60000 + overrun;
+  run.paused = false; run.remaining = null;
+  persistRun();
+  if (setTab.current !== "run") toast(`Now: ${run.tl[run.i].label}`);
+  renderRun(); renderBar();
+}
+function plusMin() {
+  if (!run) return;
+  if (run.paused) run.remaining += 60000; else run.endsAt += 60000;
+  persistRun(); tickNow();
+}
+function pauseResume() {
+  if (!run) return;
+  if (run.paused) { run.endsAt = Date.now() + run.remaining; run.paused = false; run.remaining = null; }
+  else { run.remaining = Math.max(0, run.endsAt - Date.now()); run.paused = true; }
+  persistRun(); renderRun(); renderBar();
+}
+function endSession() {
+  if (!run) return;
+  if (!confirm("End the session?")) return;
+  finish();
+}
+function finish() {
+  chime(3);
+  run = null; persistRun(); releaseWake();
+  renderRun(); renderBar();
+  toast("Session done — good work");
+}
+function tickNow() {
+  if (!run) return;
+  updateClock(run.paused ? run.remaining : run.endsAt - Date.now());
+}
+function updateClock(ms) {
+  const el = document.getElementById("bigtime");
+  const sec = Math.max(0, Math.ceil(ms/1000));
+  const txt = `${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}`;
+  if (el) {
+    el.textContent = txt;
+    el.classList.toggle("low", sec <= 30 && !run.paused);
+    el.classList.toggle("paused", !!run.paused);
+  }
+  const mini = document.getElementById("minitime");
+  if (mini) mini.textContent = txt;
+}
+
+function renderRun() {
+  const el = document.getElementById("view-run");
+  if (!run) {
+    el.innerHTML = `<div class="empty"><p class="b">No session running</p><p class="s">Set tonight's numbers on the Plan tab and press Start.</p></div>`;
+    return;
+  }
+  const b = run.tl[run.i];
+  const next = run.tl[run.i+1];
+  const d = b.drill ? DRILLS.find(x => x.key === b.drill) : null;
+  el.innerHTML = `
+    <div class="runcard">
+      <div class="blab">${b.label}</div>
+      <div class="bsub">${b.sub}</div>
+      <div class="bigtime" id="bigtime">–:––</div>
+      <div class="bprog">Block ${run.i+1} of ${run.tl.length}</div>
+      <div class="nextup">${next ? `Next: <b>${next.label}</b>${next.drill ? ` — ${DRILLS.find(x=>x.key===next.drill).name}` : ""}` : "Last block — home time after this"}</div>
+    </div>
+    ${d ? `<div class="drill">
+      <div class="dhead" style="cursor:default">
+        <div class="n"><b>${d.name}<span class="lv">${d.lv.map(l=>`<i class="${l}">${l}</i>`).join("")}</span></b><small>${CATS[d.cat]} · needs: ${d.need}</small></div>
+      </div>
+      <div class="dbody">
+        <div class="sec"><b>Run it</b>${d.run}</div>
+        <div class="sec"><b>Coaching points</b><ul>${d.pts.map(p=>`<li>${p}</li>`).join("")}</ul></div>
+        <div class="sec"><b>Easier group</b>${d.easier}</div>
+        <div class="sec"><b>Stronger group</b>${d.harder}</div>
+      </div>
+    </div>` : ""}`;
+  tickNow();
+}
+
+function renderBar() {
+  const bar = document.getElementById("bar");
+  if (run) {
+    bar.innerHTML = `
+      <div class="gchip" id="minitime" style="background:${run.paused ? "#a8a29e" : "var(--accent)"}">–:––</div>
+      <div class="meta">
+        <div class="l1">${run.tl[run.i].label}</div>
+        <div class="l2">Block ${run.i+1}/${run.tl.length}</div>
+      </div>
+      <button class="btn ctl" onclick="pauseResume()">${run.paused ? "Resume" : "Pause"}</button>
+      <button class="btn ctl" onclick="plusMin()">+1</button>
+      <button class="btn ctl" onclick="advance(false)">Skip</button>
+      <button class="btn ctl end" onclick="endSession()">End</button>`;
+    tickNow();
+  } else {
+    const c = calc();
+    bar.innerHTML = `
+      <div class="gchip" style="background:${c.valid ? "var(--accent)" : "#d6d3d1"}">${c.valid ? c.slot+"′" : "–"}</div>
+      <div class="meta">
+        <div class="l1">${c.groups} group${c.groups===1?"":"s"} · ${c.totalRounds} round${c.totalRounds===1?"":"s"}</div>
+        <div class="l2">${c.valid ? `each kid gets ${S.passes*c.slot} min of drills` : "timings don't fit"}</div>
+      </div>
+      <button class="btn go" onclick="start()" ${c.valid ? "" : "disabled"}>Start</button>`;
+  }
+}
+
+// Resume a session that was running when the page was closed or refreshed.
+function restoreRun() {
+  let r = null;
+  try { r = JSON.parse(localStorage.getItem(RUNKEY)); } catch {}
+  if (!r || !Array.isArray(r.tl) || !Number.isInteger(r.i) || r.i < 0 || r.i >= r.tl.length) return;
+  if (r.paused && Number.isFinite(r.remaining)) { run = r; return; }
+  if (!Number.isFinite(r.endsAt)) return;
+  // Roll expired blocks forward so the clock lines up with real time.
+  while (r.endsAt <= Date.now()) {
+    r.i++;
+    if (r.i >= r.tl.length) { localStorage.removeItem(RUNKEY); return; }
+    r.endsAt += r.tl[r.i].mins*60000;
+  }
+  run = r;
+}
+
+// Show the hub back link only on browsers that have visited the landing page.
+try { if (localStorage.getItem("badminton-hub-v1")) document.getElementById("backlink").classList.remove("hidden"); } catch {}
+
+restoreRun();
+if (run) { requestWake(); setTab("run"); } else { renderPlan(); renderBar(); }
+</script>
+</body>
+</html>
