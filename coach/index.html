@@ -47,6 +47,9 @@
   .step button { width: 40px; height: 40px; border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: 20px; font-weight: 600; color: #57534e; cursor: pointer; }
   .step button:active { background: var(--faint); }
   .step .val { width: 56px; text-align: center; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .step input[type="time"] { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 15px; font-weight: 700; color: var(--ink); }
+  details.more { border-top: 1px solid var(--faint); margin: 4px 8px 8px; padding: 0 0 2px; }
+  details.more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--mut); padding: 10px 8px 6px; list-style-position: inside; }
   .summary { padding: 4px 16px 14px; }
   .summary .row { display: grid; grid-template-columns: 96px 1fr; gap: 10px; padding: 5px 0; font-size: 14px; }
   .summary .row span { color: var(--mut); }
@@ -54,10 +57,13 @@
   .summary .warn { margin-top: 8px; font-size: 13px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 8px 10px; }
   .summary .bad { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
   .tonight { padding: 4px 12px 12px; }
-  .titem { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin-bottom: 6px; background: #fff; }
-  .titem .n { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .theader { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #a8a29e; margin: 10px 6px 6px; }
+  .twrap { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 6px; background: #fff; overflow: hidden; }
+  .titem { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+  .titem .place { flex: 0 0 auto; width: 56px; border: 1px solid var(--line); background: var(--faint); color: #57534e; border-radius: 8px; padding: 7px 0; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .titem .n { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
   .titem .n small { display: block; font-weight: 400; font-size: 12px; color: #a8a29e; }
-  .titem button { width: 34px; height: 34px; border: 1px solid var(--line); background: #fff; border-radius: 8px; color: #57534e; font-size: 14px; cursor: pointer; }
+  .titem button.mv, .titem button.x { width: 34px; height: 34px; border: 1px solid var(--line); background: #fff; border-radius: 8px; color: #57534e; font-size: 14px; cursor: pointer; flex: 0 0 auto; }
   .titem button.x { color: #dc2626; border-color: #fecaca; }
   .thint { font-size: 13px; color: #a8a29e; padding: 0 6px 8px; }
   .chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
@@ -84,10 +90,13 @@
   .runcard .bsub { font-size: 13px; color: var(--mut); margin-top: 2px; }
   .bigtime { font-size: 72px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 8px 0 4px; }
   .bigtime.paused { color: #a8a29e; }
-  .bigtime.low { color: #dc2626; }
+  .bigtime.low { color: #b45309; }
+  .bigtime.over { color: #dc2626; }
   .bprog { font-size: 13px; color: #a8a29e; }
+  .overhint { margin-top: 8px; font-size: 13px; font-weight: 600; color: #dc2626; }
   .nextup { font-size: 13px; color: var(--mut); border-top: 1px solid var(--faint); margin-top: 12px; padding-top: 10px; }
   .nextup b { font-weight: 600; color: #44403c; }
+  .cutbtn { display: block; width: 100%; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; margin-bottom: 12px; }
   .empty { margin-top: 24px; border: 1px dashed #d6d3d1; background: #fff; border-radius: 16px; padding: 40px 16px; text-align: center; }
   .empty p { margin: 0; }
   .empty .b { font-weight: 600; color: #57534e; }
@@ -128,6 +137,10 @@
     <section class="card">
       <h2>Tonight's numbers</h2>
       <div class="steps" id="steps"></div>
+      <details class="more">
+        <summary>More settings</summary>
+        <div class="steps" id="extras"></div>
+      </details>
     </section>
     <section class="card">
       <h2>The rotation</h2>
@@ -155,7 +168,10 @@
 // The routine this app plans: some courts are "drill courts" where a coach
 // pulls a small group out for focused work; everyone else free-plays on the
 // remaining "game courts". Groups rotate through the drill courts until every
-// kid has been coached, with warm-up/warm-down bookending the session.
+// player has been coached. Warm-up and warm-down bookend the session and can
+// carry whole-group drills. The night is anchored to a finish clock time:
+// when a round starts, the time left is redistributed across the remaining
+// rounds, so interruptions shorten rounds instead of overrunning the hall.
 const CATS = {
   warmup: "Warm-up", footwork: "Footwork", strokes: "Strokes",
   net: "Net", serve: "Serving", games: "Games", fun: "Fun"
@@ -168,12 +184,12 @@ const LEVELS = { B: "Beginner", I: "Improver", S: "Strong" };
 const DRILLS = [
   { key:"lines", name:"Court-line runs", cat:"warmup", lv:["B","I","S"], min:5, need:"Nothing",
     setup:"Everyone on the back line, facing the net.",
-    run:"Coach calls a line — 'short service line!', 'net!' — kids chassé to touch it and return. Keep the calls coming for 3–4 minutes.",
+    run:"Coach calls a line — 'short service line!', 'net!' — players chassé to touch it and return. Keep the calls coming for 3–4 minutes.",
     pts:["Side-steps, not crossed feet","Stay low with knees bent","Touch the line with your hand"],
     easier:"Jog instead of chassé.", harder:"Racquet in hand; finish every run with a shadow lunge." },
   { key:"scramble", name:"Shuttle scramble", cat:"warmup", lv:["B","I"], min:5, need:"20+ shuttles, one hoop or box per team",
     setup:"Scatter shuttles over the court. Teams of 3–4 in the corners, each with a hoop.",
-    run:"On go, kids fetch one shuttle at a time back to their hoop. Most shuttles when the court is empty wins.",
+    run:"On go, players fetch one shuttle at a time back to their hoop. Most shuttles when the court is empty wins.",
     pts:["Bend the knees to pick up, don't stoop","Quick small steps","Heads up — don't collide"],
     easier:"Fast walking only.", harder:"Carry each shuttle back balanced on the racquet face." },
   { key:"mirror", name:"Mirror moves", cat:"warmup", lv:["B","I","S"], min:5, need:"Nothing",
@@ -182,7 +198,7 @@ const DRILLS = [
     pts:["Split-step before each move","Stay on the toes","Racquet arm up as if ready"],
     easier:"Side-to-side steps only.", harder:"Add jump-smash and dive-lunge shadows." },
   { key:"keepup", name:"Racquet keep-ups", cat:"warmup", lv:["B","I"], min:4, need:"Shuttle and racquet each",
-    setup:"A shuttle and racquet per kid, spread out anywhere.",
+    setup:"A shuttle and racquet per player, spread out anywhere.",
     run:"How many keep-ups in 60 seconds? Two attempts, best score counts.",
     pts:["Flat strings facing the ceiling","Soft taps, not hits","Move the feet under the shuttle"],
     easier:"Use a balloon.", harder:"Alternate forehand and backhand faces every tap." },
@@ -193,39 +209,39 @@ const DRILLS = [
     easier:"No eliminations — just play.", harder:"Chain two actions per call: 'split-step then lunge left'." },
 
   { key:"corners", name:"Six-corner shadow", cat:"footwork", lv:["I","S"], min:8, need:"Nothing",
-    setup:"One kid per half-court standing at their base; coach at the net facing them.",
-    run:"Coach points to a corner; kids split-step, travel, shadow the shot and recover to base. Work 30–40 seconds, rest while the next pair goes.",
+    setup:"One player per half-court standing at their base; coach at the net facing them.",
+    run:"Coach points to a corner; players split-step, travel, shadow the shot and recover to base. Work 30–40 seconds, rest while the next pair goes.",
     pts:["Split-step the moment the coach points","Lunge with the racquet-side leg","Get back to base before the next point"],
     easier:"Front two and back two corners only.", harder:"Faster calls, and a full racquet swing at every corner." },
-  { key:"fan", name:"Shuttle fan runs", cat:"footwork", lv:["B","I","S"], min:8, need:"5 shuttles per kid going",
-    setup:"Five shuttles spread along the net; kid starts on the back line, centre.",
-    run:"Run in, bring one shuttle back to the back line at a time. Time each kid; rest between turns while others go.",
+  { key:"fan", name:"Shuttle fan runs", cat:"footwork", lv:["B","I","S"], min:8, need:"5 shuttles per player going",
+    setup:"Five shuttles spread along the net; player starts on the back line, centre.",
+    run:"Run in, bring one shuttle back to the back line at a time. Time each player; rest between turns while others go.",
     pts:["Low pick-up with bent knees","Push off hard out of the turn","Pace it — don't die at shuttle three"],
     easier:"Three shuttles.", harder:"Carry each shuttle on the racquet face." },
   { key:"splitstep", name:"Split-step reaction", cat:"footwork", lv:["B","I","S"], min:6, need:"Nothing",
-    setup:"Kids in a line along the service line facing the coach.",
-    run:"Coach claps, then points left, right or forward. Kids split-step on the clap and push off in the pointed direction, then recover.",
+    setup:"Players in a line along the service line facing the coach.",
+    run:"Coach claps, then points left, right or forward. Players split-step on the clap and push off in the pointed direction, then recover.",
     pts:["Land toes-first with a wide base","Push off the outside foot","Small hop, not a big jump"],
     easier:"Longer pause between clap and point.", harder:"Point a second direction before they finish recovering." },
 
   { key:"lift", name:"Lunge and lift", cat:"strokes", lv:["B","I"], min:8, need:"Box of shuttles",
-    setup:"Coach at the net with shuttles; kid starts mid-court.",
-    run:"Coach hand-feeds low at the net; kid lunges, lifts high to the back tram and recovers to base. 8 feeds each, then rotate the group.",
+    setup:"Coach at the net with shuttles; player starts mid-court.",
+    run:"Coach hand-feeds low at the net; player lunges, lifts high to the back tram and recovers to base. 8 feeds each, then rotate the group.",
     pts:["Reach with the racquet-side leg","Long swing from knee height up","Recover to base after every shot"],
-    easier:"Kid starts closer to the net; feed slower.", harder:"Alternate forehand and backhand net corners." },
+    easier:"Player starts closer to the net; feed slower.", harder:"Alternate forehand and backhand net corners." },
   { key:"clear", name:"Overhead clear from feed", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, 2 cones for the target zone",
-    setup:"Coach feeds high from mid-court; kid waits at the back. Cone off a back-tram target zone on the far side.",
-    run:"Kid clears each feed into the target zone. 8 each, rotate, count zone hits out loud.",
+    setup:"Coach feeds high from mid-court; player waits at the back. Cone off a back-tram target zone on the far side.",
+    run:"Player clears each feed into the target zone. 8 each, rotate, count zone hits out loud.",
     pts:["Turn side-on, non-racquet arm up","Hit it high and in front of you","Full follow-through"],
     easier:"Shorter hand feed, target is anywhere past the doubles service line.", harder:"Alternate straight and cross-court clears." },
   { key:"drop", name:"Clear–drop ladder", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, cones in the front court",
     setup:"Coach feeds high serves; cones mark a front-court target either side.",
-    run:"Kid alternates a clear then a drop shot at the cones. 8 feeds each, rotate.",
+    run:"Player alternates a clear then a drop shot at the cones. 8 feeds each, rotate.",
     pts:["Same preparation for both shots","Slow the strings for the drop","Drop travels down, not flat"],
     easier:"All drops, no alternating.", harder:"Coach calls 'clear' or 'drop' late, after the feed is up." },
   { key:"smash", name:"Smash from feed", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, 2 cones mid-court",
     setup:"Coach feeds a high mid-court feed; two cones mark the smash target corridor.",
-    run:"Kid smashes each feed between the cones, then resets to ready position. 6 each, rotate often — smashing is tiring.",
+    run:"Player smashes each feed between the cones, then resets to ready position. 6 each, rotate often — smashing is tiring.",
     pts:["Contact in front of the body","Hit down steeply, not far","Snap and follow through, then racquet back up"],
     easier:"Standing smash from a close, friendly feed.", harder:"Smash, then sprint in to kill a second feed at the net." },
   { key:"drive", name:"Drive rally pairs", cat:"strokes", lv:["I","S"], min:6, need:"A shuttle per pair",
@@ -235,17 +251,17 @@ const DRILLS = [
     easier:"Allow a gentle arc over the net.", harder:"Backhand drives only." },
 
   { key:"hairpin", name:"Tight net shots", cat:"net", lv:["B","I","S"], min:7, need:"Box of shuttles",
-    setup:"Kid in the front court; coach feeds loose net shots from the other side.",
-    run:"Kid steps in and plays a tight hairpin back over. Score a point if it lands inside the service line. 8 each, rotate.",
+    setup:"Player in the front court; coach feeds loose net shots from the other side.",
+    run:"Player steps in and plays a tight hairpin back over. Score a point if it lands inside the service line. 8 each, rotate.",
     pts:["Relaxed grip, strings slide under the shuttle","Take it as early and high as you can","Lunge in, don't stand and reach"],
     easier:"Let them catch the shuttle on the strings and place it over.", harder:"Alternate straight and cross-court net shots." },
   { key:"netkill", name:"Net-kill reaction", cat:"net", lv:["I","S"], min:6, need:"Box of shuttles",
-    setup:"Kid at the net, racquet up; coach flicks loose feeds just above the tape.",
-    run:"Kid taps each one down for a kill. 8 each, rotate.",
+    setup:"Player at the net, racquet up; coach flicks loose feeds just above the tape.",
+    run:"Player taps each one down for a kill. 8 each, rotate.",
     pts:["Racquet up before the feed comes","Short tap, no backswing","Don't touch the net — control the follow-through"],
     easier:"Higher, slower feeds.", harder:"Mix in one tight feed that must be hairpinned instead of killed — they have to read it." },
   { key:"triangle", name:"Drop–net–lift triangle", cat:"net", lv:["S"], min:8, need:"A shuttle per pair",
-    setup:"Two kids per half-court, one either side of the net.",
+    setup:"Two players per half-court, one either side of the net.",
     run:"Fixed pattern: A lifts, B drops, A plays a net shot, B lifts, and it repeats the other way. Keep the pattern alive as long as possible.",
     pts:["Recover between every shot","Quality beats speed — keep the pattern alive","Tight net shots, deep lifts"],
     easier:"Coach plays one side of the pattern.", harder:"After six shots the rally goes open — play the point out." },
@@ -284,7 +300,7 @@ const DRILLS = [
   { key:"targets", name:"Target zone doubles", cat:"games", lv:["B","I","S"], min:10, need:"Shuttles, cones",
     setup:"Normal 2v2 on the drill court, back tram coned off as the bonus zone.",
     run:"Normal scoring, but a shuttle landing in the bonus zone scores 2. First to 7.",
-    pts:["Rewards length without saying 'hit it deeper'","Call the bonus shots loudly — kids chase them"],
+    pts:["Rewards length without saying 'hit it deeper'","Call the bonus shots loudly — players chase them"],
     easier:"Anywhere behind the doubles service line counts.", harder:"Net kills also score 2 — length or kill, nothing in between." },
 
   { key:"battleship", name:"Shuttle battleship", cat:"fun", lv:["B","I"], min:8, need:"8 shuttle tubes or tall cones, shuttles",
@@ -293,34 +309,77 @@ const DRILLS = [
     pts:["It's high-serve practice in disguise — long relaxed swing","Serve from behind the service line, proper technique or it doesn't count"],
     easier:"Throw the shuttle instead of serving.", harder:"Must serve from inside the service box, backhand serves score double." },
   { key:"aroundworld", name:"Around the world", cat:"fun", lv:["B","I","S"], min:8, need:"Box of shuttles",
-    setup:"Kids queue at one side; coach feeds from the other side of the net.",
-    run:"Each kid hits one shot then sprints to the back of the queue. Miss and you lose a life; three lives each, last kid standing wins.",
+    setup:"Players queue at one side; coach feeds from the other side of the net.",
+    run:"Each player hits one shot then sprints to the back of the queue. Miss and you lose a life; three lives each, last player standing wins.",
     pts:["Get back in the queue fast — the drill punishes ball-watching","Watch the feed early, split-step before it"],
     easier:"Friendly feeds, unlimited lives, just keep it flowing.", harder:"Two shuttles in play at once." }
 ];
 
-const SETKEY = "badminton-coach-settings-v1";
-const PLANKEY = "badminton-coach-plan-v1";
-const RUNKEY = "badminton-coach-run-v1";
+const SETKEY = "badminton-coach-settings-v2";
+const PLANKEY = "badminton-coach-plan-v2";
+const RUNKEY = "badminton-coach-run-v2";
 
-// S = the numbers the maths runs on. Steppers below edit these.
-const DEFAULTS = { len:90, wu:10, wd:5, kids:16, group:4, courts:4, coached:2 };
+// S = the numbers the maths runs on. Steppers and time inputs edit these.
+const DEFAULTS = { start:"18:00", finish:"19:30", wu:10, wd:5, players:16, group:4, courts:4, coached:2, grace:1 };
 const FIELDS = [
-  { k:"len", lab:"Session length", sub:"minutes", step:5, min:30, max:240 },
   { k:"wu", lab:"Warm-up", sub:"minutes, everyone together", step:5, min:0, max:30 },
   { k:"wd", lab:"Warm-down", sub:"minutes at the end", step:5, min:0, max:30 },
-  { k:"kids", lab:"Kids tonight", sub:"head count, no names needed", step:1, min:2, max:60 },
-  { k:"group", lab:"Group size", sub:"kids pulled out per drill court", step:1, min:2, max:8 },
-  { k:"courts", lab:"Courts available", sub:"total, drills + games", step:1, min:1, max:8 },
+  { k:"players", lab:"Players tonight", sub:"head count", step:1, min:2, max:60 },
+  { k:"group", lab:"Group size", sub:"players pulled out per drill court", step:1, min:2, max:8 },
   { k:"coached", lab:"Drill courts", sub:"courts with a coach running drills", step:1, min:1, max:6 }
 ];
+const EXTRAS = [
+  { k:"courts", lab:"Courts available", sub:"total, drills + games", step:1, min:1, max:8 },
+  { k:"grace", lab:"Water break", sub:"minutes between rounds", step:1, min:0, max:5 }
+];
+const ALLFIELDS = FIELDS.concat(EXTRAS);
+const PLACES = [["start","Warm-up — everyone"],["rounds","Drill rounds"],["end","Warm-down — everyone"]];
+
+function parseHM(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s || "");
+  if (!m) return null;
+  const h = +m[1], mm = +m[2];
+  return (h < 24 && mm < 60) ? h*60 + mm : null;
+}
+function fmtHM(mins) { return `${String(Math.floor(mins/60)).padStart(2,"0")}:${String(mins%60).padStart(2,"0")}`; }
 
 let S = { ...DEFAULTS };
-try { const s = JSON.parse(localStorage.getItem(SETKEY)); if (s && typeof s === "object") FIELDS.forEach(f => { if (Number.isInteger(s[f.k])) S[f.k] = Math.min(f.max, Math.max(f.min, s[f.k])); }); } catch {}
+try {
+  let s = JSON.parse(localStorage.getItem(SETKEY));
+  if (!s) {
+    // Migrate v1 settings: kids -> players, session length -> finish time.
+    const old = JSON.parse(localStorage.getItem("badminton-coach-settings-v1"));
+    if (old && typeof old === "object") {
+      s = { ...old, players: old.kids };
+      if (Number.isInteger(old.len)) s.finish = fmtHM(18*60 + old.len);
+    }
+  }
+  if (s && typeof s === "object") {
+    ALLFIELDS.forEach(f => { if (Number.isInteger(s[f.k])) S[f.k] = Math.min(f.max, Math.max(f.min, s[f.k])); });
+    if (parseHM(s.start) != null) S.start = s.start;
+    if (parseHM(s.finish) != null) S.finish = s.finish;
+  }
+} catch {}
+if (S.coached > S.courts) S.coached = S.courts;
+
+// plan = tonight's drills: [{k, place}] where place is start|rounds|end.
 let plan = [];
-try { const p = JSON.parse(localStorage.getItem(PLANKEY)); if (Array.isArray(p)) plan = p.filter(k => DRILLS.some(d => d.key === k)); } catch {}
-let run = null;          // { tl:[{label,sub,mins,drill}], i, endsAt, paused, remaining }
-let catFilter = "all", lvFilter = "all", expandedDrill = null;
+try {
+  let p = JSON.parse(localStorage.getItem(PLANKEY));
+  if (!p) {
+    const old = JSON.parse(localStorage.getItem("badminton-coach-plan-v1"));
+    if (Array.isArray(old)) p = old.map(k => ({ k, place: defaultPlace(k) }));
+  }
+  if (Array.isArray(p)) plan = p.filter(x => x && typeof x === "object" &&
+    DRILLS.some(d => d.key === x.k) && ["start","rounds","end"].includes(x.place));
+} catch {}
+function defaultPlace(key) {
+  const d = DRILLS.find(x => x.key === key);
+  return d && d.cat === "warmup" ? "start" : "rounds";
+}
+
+let run = null;   // { seq, i, endsAt, sessionEnd, paused, remaining }
+let catFilter = "all", lvFilter = "all", expandedDrill = null, expandedTonight = null;
 let audio = null, wakeLock = null;
 
 function persistS() { try { localStorage.setItem(SETKEY, JSON.stringify(S)); } catch {} }
@@ -334,16 +393,21 @@ function toast(msg) {
 
 // The rotation maths. Everything on the Plan tab derives from this.
 function calc() {
-  const groups = Math.ceil(S.kids / S.group);
-  const lastGroup = S.kids - (groups - 1) * S.group;
+  const startM = parseHM(S.start), finishM = parseHM(S.finish);
+  const len = (startM != null && finishM != null) ? finishM - startM : 0;
+  const groups = Math.ceil(S.players / S.group);
+  const lastGroup = S.players - (groups - 1) * S.group;
   const courtsUsed = Math.min(S.coached, groups);
   const rounds = Math.ceil(groups / courtsUsed);
-  const drillTime = S.len - S.wu - S.wd;
+  // One water/swap break before each round (except a round that opens the
+  // night) and one before the warm-down.
+  const graceCount = Math.max(0, rounds - (S.wu > 0 ? 0 : 1)) + (S.wd > 0 ? 1 : 0);
+  const drillTime = len - S.wu - S.wd - graceCount * S.grace;
   const slot = Math.floor(drillTime / rounds);
   const spare = drillTime - slot * rounds;
   const lastRoundCourts = groups - (rounds - 1) * courtsUsed;
-  return { groups, lastGroup, courtsUsed, rounds, drillTime, slot, spare, lastRoundCourts,
-           valid: drillTime > 0 && slot >= 1 };
+  return { len, groups, lastGroup, courtsUsed, rounds, graceCount, drillTime, slot, spare, lastRoundCourts,
+           valid: len > 0 && drillTime > 0 && slot >= 1 };
 }
 
 function setTab(tab) {
@@ -360,70 +424,125 @@ function setTab(tab) {
 setTab.current = "plan";
 
 function adjust(k, dir) {
-  const f = FIELDS.find(x => x.k === k);
+  const f = ALLFIELDS.find(x => x.k === k);
   S[k] = Math.min(f.max, Math.max(f.min, S[k] + dir * f.step));
   // Can't coach on more courts than exist.
   if (S.coached > S.courts) S.coached = S.courts;
   persistS(); renderPlan(); renderBar();
 }
+function setTime(k, v) {
+  if (parseHM(v) == null) return;
+  S[k] = v;
+  persistS(); renderPlan(); renderBar();
+}
+
+function stepRow(f) {
+  return `<div class="step">
+    <div class="lab">${f.lab}<small>${f.sub}</small></div>
+    <button onclick="adjust('${f.k}',-1)" aria-label="decrease">−</button>
+    <div class="val">${S[f.k]}</div>
+    <button onclick="adjust('${f.k}',1)" aria-label="increase">+</button>
+  </div>`;
+}
 
 function renderPlan() {
-  document.getElementById("steps").innerHTML = FIELDS.map(f => `
+  document.getElementById("steps").innerHTML = `
     <div class="step">
-      <div class="lab">${f.lab}<small>${f.sub}</small></div>
-      <button onclick="adjust('${f.k}',-1)" aria-label="decrease">−</button>
-      <div class="val">${S[f.k]}</div>
-      <button onclick="adjust('${f.k}',1)" aria-label="increase">+</button>
-    </div>`).join("");
+      <div class="lab">Start time<small>first player on court</small></div>
+      <input type="time" value="${S.start}" onchange="setTime('start',this.value)">
+    </div>
+    <div class="step">
+      <div class="lab">Finish time<small>the night is planned back from this</small></div>
+      <input type="time" value="${S.finish}" onchange="setTime('finish',this.value)">
+    </div>` + FIELDS.map(stepRow).join("");
+  document.getElementById("extras").innerHTML = EXTRAS.map(stepRow).join("");
 
   const c = calc();
   const groupsTxt = c.lastGroup === S.group || c.groups === 1
-    ? `${c.groups} group${c.groups===1?"":"s"} of ${Math.min(S.group, S.kids)}`
+    ? `${c.groups} group${c.groups===1?"":"s"} of ${Math.min(S.group, S.players)}`
     : `${c.groups} groups of ${S.group} (last one has ${c.lastGroup})`;
   const rows = [
+    ["Session", c.len > 0 ? `${c.len} min (${S.start}–${S.finish})` : "finish must be after the start"],
     ["Groups", groupsTxt],
-    ["Game courts", `${Math.max(0, S.courts - S.coached)} of ${S.courts} — everyone not in drills plays here`],
+    ["Game courts", `${Math.max(0, S.courts - S.coached)} of ${S.courts} — players not in drills play here`],
     ["Rounds", `${c.rounds} × ${c.valid ? c.slot : "–"} min`],
-    ["Per kid", c.valid ? `${c.slot} min of coaching` : "–"],
-    ["Spare", c.valid ? `${c.spare} min for swap-overs and slippage` : "–"]
+    ["Per player", c.valid ? `${c.slot} min of coaching` : "–"],
+    ["Breaks", S.grace > 0 ? `${c.graceCount} × ${S.grace} min for water and swaps` : "none"],
+    ["Spare", c.valid ? `${c.spare} min` : "–"]
   ];
   let warn = "";
-  if (!c.valid) warn = `<div class="warn bad">No time left for drills — the warm-up and warm-down don't fit in ${S.len} minutes with ${c.rounds} rounds.</div>`;
+  if (c.len <= 0) warn = `<div class="warn bad">Finish time must be after the start time.</div>`;
+  else if (!c.valid) warn = `<div class="warn bad">No time left for drills — warm-up, warm-down and breaks don't fit in ${c.len} minutes with ${c.rounds} rounds.</div>`;
   else if (c.slot < 6) warn = `<div class="warn">Rounds of ${c.slot} min are very short. Bigger groups, another drill court, or a shorter warm-up would give each group more time.</div>`;
   else if (c.slot > 20) warn = `<div class="warn">Rounds of ${c.slot} min are long for one drill — plan two activities per round, or use smaller groups for shorter rounds.</div>`;
   if (c.valid && c.lastRoundCourts < c.courtsUsed) warn += `<div class="warn">The last round only fills ${c.lastRoundCourts} of ${S.coached} drill courts — a coach gets a breather.</div>`;
-
+  if (plan.some(p => p.place === "start") && S.wu === 0) warn += `<div class="warn">Warm-up drills are planned but the warm-up is 0 minutes — they won't run.</div>`;
+  if (plan.some(p => p.place === "end") && S.wd === 0) warn += `<div class="warn">Warm-down drills are planned but the warm-down is 0 minutes — they won't run.</div>`;
   document.getElementById("summary").innerHTML =
     rows.map(r => `<div class="row"><span>${r[0]}</span><b>${r[1]}</b></div>`).join("") + warn;
 
   const t = document.getElementById("tonight");
   if (!plan.length) {
-    t.innerHTML = `<p class="thint">No drills picked yet — grab some from the Drills tab. Rounds run fine without them; you just won't get the on-screen coaching notes.</p>`;
+    t.innerHTML = `<p class="thint">No drills picked yet — grab some from the Drills tab. Tap a drill's placement chip to move it between warm-up, rounds and warm-down.</p>`;
   } else {
-    t.innerHTML = plan.map((k, i) => {
-      const d = DRILLS.find(x => x.key === k);
-      return `<div class="titem">
-        <div class="n">${d.name}<small>${CATS[d.cat]} · suits ${d.lv.map(l=>LEVELS[l]).join(", ")}</small></div>
-        ${i>0?`<button onclick="moveDrill(${i},-1)" aria-label="move up">↑</button>`:""}
-        ${i<plan.length-1?`<button onclick="moveDrill(${i},1)" aria-label="move down">↓</button>`:""}
-        <button class="x" onclick="removeDrill(${i})" aria-label="remove">✕</button>
-      </div>`;
-    }).join("") + `<p class="thint">Rounds are split across these in order — with ${plan.length} drill${plan.length===1?"":"s"} over ${c.rounds} rounds, coaches switch drill partway through the night.</p>`;
+    const nR = plan.filter(p => p.place === "rounds").length;
+    t.innerHTML = PLACES.map(([pl, heading]) => {
+      const items = plan.map((p, i) => ({ p, i })).filter(x => x.p.place === pl);
+      if (!items.length) return "";
+      return `<div class="theader">${heading}</div>` + items.map((x, pos) => {
+        const d = DRILLS.find(dd => dd.key === x.p.k);
+        return `<div class="twrap">
+          <div class="titem">
+            <button class="place" onclick="cyclePlace(${x.i})">${pl==="start"?"Start":pl==="rounds"?"Rounds":"End"}</button>
+            <div class="n" onclick="toggleTonight('${d.key}')">${d.name}<small>${CATS[d.cat]} · tap for details</small></div>
+            ${pos>0?`<button class="mv" onclick="movePlan(${x.i},-1)" aria-label="move up">↑</button>`:""}
+            ${pos<items.length-1?`<button class="mv" onclick="movePlan(${x.i},1)" aria-label="move down">↓</button>`:""}
+            <button class="x" onclick="removeDrill(${x.i})" aria-label="remove">✕</button>
+          </div>
+          ${expandedTonight === d.key ? drillBody(d) : ""}
+        </div>`;
+      }).join("");
+    }).join("") + `<p class="thint">${nR
+      ? `Rounds are split across the ${nR} round drill${nR===1?"":"s"} in order. Tap the chip to move a drill; warm-up/warm-down time splits evenly across their drills.`
+      : `No drills placed in the rounds yet — tap a chip to move one there.`}</p>`;
   }
 }
 
-function addDrill(key) {
-  const i = plan.indexOf(key);
-  if (i >= 0) { plan.splice(i, 1); toast("Removed from tonight"); }
-  else { plan.push(key); toast("Added to tonight"); }
-  persistPlan(); renderDrills(); renderBar();
+function drillBody(d) {
+  return `<div class="dbody">
+    <div class="sec"><b>Needs</b>${d.need}</div>
+    <div class="sec"><b>Setup</b>${d.setup}</div>
+    <div class="sec"><b>Run it</b>${d.run}</div>
+    <div class="sec"><b>Coaching points</b><ul>${d.pts.map(p=>`<li>${p}</li>`).join("")}</ul></div>
+    <div class="sec"><b>Easier</b>${d.easier}</div>
+    <div class="sec"><b>Harder</b>${d.harder}</div>
+  </div>`;
 }
-function removeDrill(i) { plan.splice(i, 1); persistPlan(); renderPlan(); renderBar(); }
-function moveDrill(i, dir) {
-  const j = i + dir;
+
+function addDrill(key) {
+  const i = plan.findIndex(p => p.k === key);
+  if (i >= 0) { plan.splice(i, 1); toast("Removed from tonight"); }
+  else {
+    const place = defaultPlace(key);
+    plan.push({ k: key, place });
+    toast(place === "start" ? "Added to warm-up" : "Added to rounds");
+  }
+  persistPlan(); renderDrills();
+}
+function removeDrill(i) { plan.splice(i, 1); persistPlan(); renderPlan(); }
+function cyclePlace(i) {
+  const order = ["start","rounds","end"];
+  plan[i].place = order[(order.indexOf(plan[i].place) + 1) % order.length];
+  persistPlan(); renderPlan();
+}
+function movePlan(i, dir) {
+  const idxs = plan.map((x, j) => x.place === plan[i].place ? j : -1).filter(j => j >= 0);
+  const j = idxs[idxs.indexOf(i) + dir];
+  if (j == null) return;
   [plan[i], plan[j]] = [plan[j], plan[i]];
   persistPlan(); renderPlan();
 }
+function toggleTonight(k) { expandedTonight = expandedTonight === k ? null : k; renderPlan(); }
 
 function renderDrills() {
   const cats = ["all", ...Object.keys(CATS)];
@@ -436,8 +555,7 @@ function renderDrills() {
   const list = DRILLS.filter(d =>
     (catFilter==="all" || d.cat===catFilter) && (lvFilter==="all" || d.lv.includes(lvFilter)));
   document.getElementById("drilllist").innerHTML = list.length ? list.map(d => {
-    const inPlan = plan.includes(d.key);
-    const ex = expandedDrill === d.key;
+    const inPlan = plan.some(p => p.k === d.key);
     return `<div class="drill">
       <div class="dhead" onclick="toggleDrill('${d.key}')">
         <div class="n">
@@ -446,14 +564,7 @@ function renderDrills() {
         </div>
         <button class="add ${inPlan?"in":""}" onclick="event.stopPropagation();addDrill('${d.key}')">${inPlan?"✓ Tonight":"+ Add"}</button>
       </div>
-      ${ex ? `<div class="dbody">
-        <div class="sec"><b>Needs</b>${d.need}</div>
-        <div class="sec"><b>Setup</b>${d.setup}</div>
-        <div class="sec"><b>Run it</b>${d.run}</div>
-        <div class="sec"><b>Coaching points</b><ul>${d.pts.map(p=>`<li>${p}</li>`).join("")}</ul></div>
-        <div class="sec"><b>Easier</b>${d.easier}</div>
-        <div class="sec"><b>Harder</b>${d.harder}</div>
-      </div>` : ""}
+      ${expandedDrill === d.key ? drillBody(d) : ""}
     </div>`;
   }).join("") : `<div class="empty"><p class="b">Nothing matches those filters</p><p class="s">Try a different type or level.</p></div>`;
 }
@@ -464,39 +575,96 @@ function setFilter(which, v) {
 function toggleDrill(k) { expandedDrill = expandedDrill === k ? null : k; renderDrills(); }
 
 // ---- Run mode ----
+// Blocks: open/close carry fixed seconds; grace auto-advances; rounds are
+// elastic — their length is computed when they start, from the time left
+// until the session's finish clock time.
 
-function buildTimeline() {
+function splitBudget(mins, n) {
+  const total = mins * 60, per = Math.floor(total / n);
+  return Array.from({ length: n }, (_, i) => i === n - 1 ? total - per * (n - 1) : per);
+}
+
+function buildSeq() {
   const c = calc();
-  const tl = [];
-  if (S.wu > 0) tl.push({ label:"Warm-up", sub:"Everyone together", mins:S.wu, drill:null });
-  for (let r = 0; r < c.rounds; r++) {
-    const drill = plan.length ? plan[Math.floor(r * plan.length / c.rounds)] : null;
-    tl.push({
-      label:`Drill round ${r+1} of ${c.rounds}`,
-      sub:`Pull ${S.group} kids per drill court · rest play on game courts`,
-      mins:c.slot, drill
-    });
+  const seq = [];
+  const startDrills = plan.filter(p => p.place === "start");
+  const endDrills = plan.filter(p => p.place === "end");
+  const roundDrills = plan.filter(p => p.place === "rounds");
+  if (S.wu > 0) {
+    if (startDrills.length) {
+      const secs = splitBudget(S.wu, startDrills.length);
+      startDrills.forEach((p, i) => seq.push({ type:"open", label:"Warm-up", sub:"Everyone together", secs:secs[i], drill:p.k }));
+    } else {
+      seq.push({ type:"open", label:"Warm-up", sub:"Everyone together", secs:S.wu*60, drill:null });
+    }
   }
-  if (S.wd > 0) tl.push({ label:"Warm-down", sub:"Everyone together — stretch, collect shuttles, pack up", mins:S.wd, drill:null });
-  return tl;
+  for (let r = 0; r < c.rounds; r++) {
+    if (S.grace > 0 && seq.length) seq.push({ type:"grace" });
+    seq.push({ type:"round", drill: roundDrills.length ? roundDrills[Math.floor(r * roundDrills.length / c.rounds)].k : null });
+  }
+  if (S.wd > 0) {
+    if (S.grace > 0) seq.push({ type:"grace" });
+    if (endDrills.length) {
+      const secs = splitBudget(S.wd, endDrills.length);
+      endDrills.forEach((p, i) => seq.push({ type:"close", label:"Warm-down", sub: i === endDrills.length-1 ? "Then stretch and pack up" : "Everyone together", secs:secs[i], drill:p.k }));
+    } else {
+      seq.push({ type:"close", label:"Warm-down", sub:"Everyone together — stretch, collect shuttles, pack up", secs:S.wd*60, drill:null });
+    }
+  }
+  return seq;
 }
 
 function start() {
   const c = calc();
   if (!c.valid) { toast("Fix the timings first — see the Plan tab"); return; }
-  const tl = buildTimeline();
-  run = { tl, i:0, endsAt: Date.now() + tl[0].mins*60000, paused:false, remaining:null };
-  persistRun();
+  const fin = parseHM(S.finish);
+  const d = new Date(); d.setHours(Math.floor(fin/60), fin%60, 0, 0);
+  let sessionEnd = d.getTime();
+  if (sessionEnd <= Date.now()) {
+    sessionEnd = Date.now() + c.len*60000;
+    toast("Finish time already passed — running the planned length instead");
+  }
+  run = { seq: buildSeq(), i:0, endsAt:0, sessionEnd, paused:false, remaining:null };
   initAudio(); requestWake();
+  enterBlock(0);
   setTab("run");
 }
+
+function roundSlotMs(i, now) {
+  const roundsLeft = run.seq.slice(i).filter(b => b.type === "round").length;
+  const after = run.seq.slice(i + 1);
+  const graceLeft = after.filter(b => b.type === "grace").length;
+  const fixedLeft = after.reduce((a, b) => a + (b.secs || 0), 0) * 1000;
+  const avail = run.sessionEnd - now - fixedLeft - graceLeft * S.grace * 60000;
+  return Math.max(60000, Math.floor(avail / roundsLeft));
+}
+
+function enterBlock(i) {
+  run.i = i;
+  const b = run.seq[i];
+  const now = Date.now();
+  if (b.type === "grace") run.endsAt = now + S.grace * 60000;
+  else if (b.type === "round") run.endsAt = now + roundSlotMs(i, now);
+  else run.endsAt = now + b.secs * 1000;
+  b.chimed = false;
+  run.paused = false; run.remaining = null;
+  persistRun(); renderRun(); renderBar();
+}
+
+function nextBlock() {
+  if (!run) return;
+  chime(1);
+  if (run.i + 1 >= run.seq.length) { finish(); return; }
+  enterBlock(run.i + 1);
+  if (setTab.current !== "run") toast(`Now: ${blockInfo(run.i).label}`);
+}
+
 function initAudio() {
   try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {}
 }
 function chime(n) {
   try {
-    if (!audio) return;
-    for (let i = 0; i < n; i++) {
+    if (audio) for (let i = 0; i < n; i++) {
       const o = audio.createOscillator(), g = audio.createGain();
       o.connect(g); g.connect(audio.destination);
       o.frequency.value = 880;
@@ -521,39 +689,36 @@ document.addEventListener("visibilitychange", () => {
 
 function tick() {
   if (!run || run.paused) return;
+  const b = run.seq[run.i];
   const rem = run.endsAt - Date.now();
-  if (rem <= 0) {
+  if (rem <= 0 && b.type === "grace") {
+    // Breaks advance themselves; everything else waits for the coach.
     chime(2);
-    advance(true);
-  } else {
-    updateClock(rem);
+    if (run.i + 1 >= run.seq.length) finish();
+    else enterBlock(run.i + 1);
+    return;
   }
+  if (rem <= 0 && !b.chimed) { b.chimed = true; chime(2); persistRun(); }
+  updateClock(rem);
 }
 setInterval(tick, 250);
 
-function advance(auto) {
-  if (!run) return;
-  if (!auto) chime(1);
-  // Carry a small overrun into the next block so the session still ends on time.
-  const overrun = auto ? Math.min(0, run.endsAt - Date.now()) : 0;
-  run.i++;
-  if (run.i >= run.tl.length) { finish(); return; }
-  run.endsAt = Date.now() + run.tl[run.i].mins*60000 + overrun;
-  run.paused = false; run.remaining = null;
-  persistRun();
-  if (setTab.current !== "run") toast(`Now: ${run.tl[run.i].label}`);
-  renderRun(); renderBar();
-}
-function plusMin() {
-  if (!run) return;
-  if (run.paused) run.remaining += 60000; else run.endsAt += 60000;
-  persistRun(); tickNow();
-}
 function pauseResume() {
   if (!run) return;
   if (run.paused) { run.endsAt = Date.now() + run.remaining; run.paused = false; run.remaining = null; }
-  else { run.remaining = Math.max(0, run.endsAt - Date.now()); run.paused = true; }
+  else { run.remaining = run.endsAt - Date.now(); run.paused = true; }
   persistRun(); renderRun(); renderBar();
+}
+function cutRound() {
+  if (!run) return;
+  const future = run.seq.map((b, j) => b.type === "round" && j > run.i ? j : -1).filter(j => j > 0);
+  if (!future.length) { toast("No rounds left to cut"); return; }
+  if (!confirm("Cut the last round? Remaining rounds get more time, but one group misses drills.")) return;
+  const last = future[future.length - 1];
+  const hasGrace = run.seq[last - 1] && run.seq[last - 1].type === "grace" && last - 1 > run.i;
+  run.seq.splice(hasGrace ? last - 1 : last, hasGrace ? 2 : 1);
+  persistRun(); renderRun(); renderBar();
+  toast("Round cut — time goes to the rest");
 }
 function endSession() {
   if (!run) return;
@@ -566,21 +731,40 @@ function finish() {
   renderRun(); renderBar();
   toast("Session done — good work");
 }
+
 function tickNow() {
   if (!run) return;
   updateClock(run.paused ? run.remaining : run.endsAt - Date.now());
 }
 function updateClock(ms) {
+  const over = ms < 0;
+  const sec = Math.ceil(Math.abs(ms) / 1000);
+  const txt = `${over ? "+" : ""}${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}`;
   const el = document.getElementById("bigtime");
-  const sec = Math.max(0, Math.ceil(ms/1000));
-  const txt = `${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}`;
   if (el) {
     el.textContent = txt;
-    el.classList.toggle("low", sec <= 30 && !run.paused);
+    el.classList.toggle("low", !over && sec <= 30 && !run.paused);
+    el.classList.toggle("over", over && !run.paused);
     el.classList.toggle("paused", !!run.paused);
   }
+  const hint = document.getElementById("overhint");
+  if (hint) hint.classList.toggle("hidden", !over || run.paused);
   const mini = document.getElementById("minitime");
-  if (mini) mini.textContent = txt;
+  if (mini) {
+    mini.textContent = txt;
+    mini.style.background = run.paused ? "#a8a29e" : over ? "#dc2626" : "var(--accent)";
+  }
+}
+
+function blockInfo(i) {
+  const b = run.seq[i];
+  if (b.type === "round") {
+    const total = run.seq.filter(x => x.type === "round").length;
+    const k = run.seq.slice(0, i + 1).filter(x => x.type === "round").length;
+    return { label:`Drill round ${k} of ${total}`, sub:`Pull ${S.group} players per drill court · rest play on game courts`, drill:b.drill };
+  }
+  if (b.type === "grace") return { label:"Water + swap", sub:"Drink up — next group to the drill courts", drill:null };
+  return { label:b.label, sub:b.sub, drill:b.drill };
 }
 
 function renderRun() {
@@ -589,17 +773,23 @@ function renderRun() {
     el.innerHTML = `<div class="empty"><p class="b">No session running</p><p class="s">Set tonight's numbers on the Plan tab and press Start.</p></div>`;
     return;
   }
-  const b = run.tl[run.i];
-  const next = run.tl[run.i+1];
-  const d = b.drill ? DRILLS.find(x => x.key === b.drill) : null;
+  const info = blockInfo(run.i);
+  let nx = null;
+  for (let j = run.i + 1; j < run.seq.length; j++) {
+    if (run.seq[j].type !== "grace") { nx = blockInfo(j); break; }
+  }
+  const d = info.drill ? DRILLS.find(x => x.key === info.drill) : null;
+  const futureRounds = run.seq.slice(run.i + 1).filter(b => b.type === "round").length;
   el.innerHTML = `
     <div class="runcard">
-      <div class="blab">${b.label}</div>
-      <div class="bsub">${b.sub}</div>
+      <div class="blab">${info.label}</div>
+      <div class="bsub">${info.sub}</div>
       <div class="bigtime" id="bigtime">–:––</div>
-      <div class="bprog">Block ${run.i+1} of ${run.tl.length}</div>
-      <div class="nextup">${next ? `Next: <b>${next.label}</b>${next.drill ? ` — ${DRILLS.find(x=>x.key===next.drill).name}` : ""}` : "Last block — home time after this"}</div>
+      <div class="bprog">Block ${run.i+1} of ${run.seq.length} · finishes ${S.finish}</div>
+      <div class="overhint hidden" id="overhint">Time's up — tap Next when the groups have swapped</div>
+      <div class="nextup">${nx ? `Next: <b>${nx.label}</b>${nx.drill ? ` — ${DRILLS.find(x=>x.key===nx.drill).name}` : ""}` : "Last block — home time after this"}</div>
     </div>
+    ${futureRounds ? `<button class="cutbtn" onclick="cutRound()">Cut a round — ${futureRounds} still to come</button>` : ""}
     ${d ? `<div class="drill">
       <div class="dhead" style="cursor:default">
         <div class="n"><b>${d.name}<span class="lv">${d.lv.map(l=>`<i class="${l}">${l}</i>`).join("")}</span></b><small>${CATS[d.cat]} · needs: ${d.need}</small></div>
@@ -617,24 +807,24 @@ function renderRun() {
 function renderBar() {
   const bar = document.getElementById("bar");
   if (run) {
+    const info = blockInfo(run.i);
     bar.innerHTML = `
-      <div class="gchip" id="minitime" style="background:${run.paused ? "#a8a29e" : "var(--accent)"}">–:––</div>
+      <div class="gchip" id="minitime">–:––</div>
       <div class="meta">
-        <div class="l1">${run.tl[run.i].label}</div>
-        <div class="l2">Block ${run.i+1}/${run.tl.length}</div>
+        <div class="l1">${info.label}</div>
+        <div class="l2">Block ${run.i+1}/${run.seq.length} · finishes ${S.finish}</div>
       </div>
       <button class="btn ctl" onclick="pauseResume()">${run.paused ? "Resume" : "Pause"}</button>
-      <button class="btn ctl" onclick="plusMin()">+1</button>
-      <button class="btn ctl" onclick="advance(false)">Skip</button>
+      <button class="btn go" onclick="nextBlock()">Next</button>
       <button class="btn ctl end" onclick="endSession()">End</button>`;
     tickNow();
   } else {
     const c = calc();
     bar.innerHTML = `
-      <div class="gchip" style="background:${c.valid ? "var(--accent)" : "#d6d3d1"}">${c.valid ? c.slot+"′" : "–"}</div>
+      <div class="gchip" style="background:${c.valid ? "var(--accent)" : "#d6d3d1"}">${c.valid ? c.slot+"m" : "–"}</div>
       <div class="meta">
         <div class="l1">${c.groups} group${c.groups===1?"":"s"} · ${c.rounds} round${c.rounds===1?"":"s"}</div>
-        <div class="l2">${c.valid ? `each kid gets ${c.slot} min of drills` : "timings don't fit"}</div>
+        <div class="l2">${c.valid ? `each player gets ${c.slot} min of drills` : "timings don't fit"}</div>
       </div>
       <button class="btn go" onclick="start()" ${c.valid ? "" : "disabled"}>Start</button>`;
   }
@@ -644,16 +834,17 @@ function renderBar() {
 function restoreRun() {
   let r = null;
   try { r = JSON.parse(localStorage.getItem(RUNKEY)); } catch {}
-  if (!r || !Array.isArray(r.tl) || !Number.isInteger(r.i) || r.i < 0 || r.i >= r.tl.length) return;
+  if (!r || !Array.isArray(r.seq) || !r.seq.length || !Number.isInteger(r.i) ||
+      r.i < 0 || r.i >= r.seq.length || !Number.isFinite(r.sessionEnd)) return;
   if (r.paused && Number.isFinite(r.remaining)) { run = r; return; }
   if (!Number.isFinite(r.endsAt)) return;
-  // Roll expired blocks forward so the clock lines up with real time.
-  while (r.endsAt <= Date.now()) {
-    r.i++;
-    if (r.i >= r.tl.length) { localStorage.removeItem(RUNKEY); return; }
-    r.endsAt += r.tl[r.i].mins*60000;
-  }
   run = r;
+  // Breaks that expired while the page was away advance now; manual blocks
+  // just show their overtime.
+  while (run && run.seq[run.i].type === "grace" && run.endsAt <= Date.now()) {
+    if (run.i + 1 >= run.seq.length) { run = null; try { localStorage.removeItem(RUNKEY); } catch {} return; }
+    enterBlock(run.i + 1);
+  }
 }
 
 // Show the hub back link only on browsers that have visited the landing page.
