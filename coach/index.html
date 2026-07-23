@@ -447,10 +447,12 @@ function groupSizes(n) {
   const sizes = Array(base).fill(S.group);
   if (rem) {
     if (S.oddMode === "merge" && base && rem <= base * (S.cap - S.group)) {
-      let left = rem;
-      for (let i = 0; i < sizes.length && left; i++) {
-        const add = Math.min(S.cap - sizes[i], left);
-        sizes[i] += add; left -= add;
+      // Spread the leftovers one per group, round-robin, so sizes stay
+      // even (5·5·5·4) instead of one group filling to the cap first.
+      let left = rem, i = 0;
+      while (left) {
+        if (sizes[i % sizes.length] < S.cap) { sizes[i % sizes.length]++; left--; }
+        i++;
       }
     } else sizes.push(rem);
   }
