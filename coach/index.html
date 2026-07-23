@@ -48,8 +48,19 @@
   .step button:active { background: var(--faint); }
   .step .val { width: 56px; text-align: center; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .step input[type="time"] { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .seg { display: flex; gap: 4px; background: #e7e5e4; border-radius: 10px; padding: 3px; }
+  .seg button { border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--mut); cursor: pointer; }
+  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
   details.more { border-top: 1px solid var(--faint); margin: 4px 8px 8px; padding: 0 0 2px; }
   details.more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--mut); padding: 10px 8px 6px; list-style-position: inside; }
+  details.guide summary { cursor: pointer; font-size: 15px; font-weight: 600; padding: 12px 16px; }
+  .gbody { padding: 0 16px 14px; font-size: 14px; line-height: 1.45; color: #44403c; }
+  .gbody h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #a8a29e; margin: 12px 0 2px; font-weight: 700; }
+  .gbody p { margin: 4px 0; }
+  .gbody ol { margin: 4px 0 10px; padding-left: 20px; }
+  .gbody ol li { margin: 0 0 8px; }
+  details.fine { border-top: 1px solid var(--faint); margin-top: 8px; }
+  details.fine summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--mut); padding: 8px 0 4px; }
   .summary { padding: 4px 16px 14px; }
   .summary .row { display: grid; grid-template-columns: 96px 1fr; gap: 10px; padding: 5px 0; font-size: 14px; }
   .summary .row span { color: var(--mut); }
@@ -150,6 +161,27 @@
       <h2>Tonight's drills</h2>
       <div class="tonight" id="tonight"></div>
     </section>
+    <details class="card guide">
+      <summary>How it works</summary>
+      <div class="gbody">
+        <ol>
+          <li><b>Plan the night.</b> Set the times and player numbers above — the app works out the groups, the rounds, and how long each group gets on a drill court.</li>
+          <li><b>Pick drills.</b> Add them from the Drills tab. The chip on each one places it: warm-up (Start), the drill courts (Rounds), or warm-down (End).</li>
+          <li><b>Run it.</b> Tap Start and follow the big timer. When a round's time is up it chimes — swap the groups and tap <b>Next</b>. The water break tells you exactly how many players to grab.</li>
+          <li><b>Things change? Fine.</b> Running late shortens the remaining rounds automatically so the night still ends on time. Extra players walked in? Bump the head count on this tab, even mid-session.</li>
+        </ol>
+        <details class="fine">
+          <summary>The fine print</summary>
+          <h3>The maths</h3>
+          <p>Players ÷ group size = groups. Groups ÷ drill courts = rounds. Round length = time left after warm-up, warm-down and breaks, shared equally. Odd leftover players form their own small group (default) or merge into the others up to a max size — see More settings.</p>
+          <h3>The timing</h3>
+          <p>The night is anchored to the finish time. Each round's length is worked out the moment it starts, from the time left. Held up 5 minutes? The remaining rounds each get a bit shorter. Finished early? They get longer. The warm-down is never shortened.</p>
+          <p>Rounds never advance themselves — the clock counts up in red until you tap Next, so a chat with a parent can't derail the schedule. Badly behind? <b>Cut a round</b>: one group misses drills, the rest keep round lengths worth having.</p>
+          <h3>Drills</h3>
+          <p>The rounds hold one drill for now — picking another from the library swaps it. Warm-up and warm-down split their minutes evenly across their drills. Every drill has an easier and harder variation for weaker and stronger groups.</p>
+        </details>
+      </div>
+    </details>
   </main>
 
   <main id="view-run" class="hidden"></main>
@@ -182,6 +214,11 @@ const LEVELS = { B: "Beginner", I: "Improver", S: "Strong" };
 // suits. Every drill carries an easier/harder variation so the same drill can
 // run for a weaker or stronger group — that's the mixed-levels strategy.
 const DRILLS = [
+  { key:"waynes", name:"Wayne-robics", cat:"warmup", lv:["B","I","S"], min:5, need:"Racquet each — and Wayne",
+    setup:"Everyone spread out facing the coach, racquet in hand.",
+    run:"Wayne's routine — players stand in place and follow the coach's racquet and footwork patterns. Wayne knows the moves.",
+    pts:["Wayne runs this one","Follow the racquet, not just the feet"],
+    easier:"Slower patterns.", harder:"Faster patterns, add a split-step between moves." },
   { key:"lines", name:"Court-line runs", cat:"warmup", lv:["B","I","S"], min:5, need:"Nothing",
     setup:"Everyone on the back line, facing the net.",
     run:"Coach calls a line — 'short service line!', 'net!' — players chassé to touch it and return. Keep the calls coming for 3–4 minutes.",
@@ -320,7 +357,7 @@ const PLANKEY = "badminton-coach-plan-v2";
 const RUNKEY = "badminton-coach-run-v2";
 
 // S = the numbers the maths runs on. Steppers and time inputs edit these.
-const DEFAULTS = { start:"18:00", finish:"19:30", wu:10, wd:5, players:16, group:4, courts:4, coached:2, grace:1 };
+const DEFAULTS = { start:"17:30", finish:"19:00", wu:10, wd:5, players:16, group:4, courts:4, coached:2, grace:1, cap:5, oddMode:"own" };
 const FIELDS = [
   { k:"wu", lab:"Warm-up", sub:"minutes, everyone together", step:5, min:0, max:30 },
   { k:"wd", lab:"Warm-down", sub:"minutes at the end", step:5, min:0, max:30 },
@@ -330,7 +367,8 @@ const FIELDS = [
 ];
 const EXTRAS = [
   { k:"courts", lab:"Courts available", sub:"total, drills + games", step:1, min:1, max:8 },
-  { k:"grace", lab:"Water break", sub:"minutes between rounds", step:1, min:0, max:5 }
+  { k:"grace", lab:"Water break", sub:"minutes between rounds", step:1, min:0, max:5 },
+  { k:"cap", lab:"Max group size", sub:"how big a group can grow when merging", step:1, min:2, max:10 }
 ];
 const ALLFIELDS = FIELDS.concat(EXTRAS);
 const PLACES = [["start","Warm-up — everyone"],["rounds","Drill rounds"],["end","Warm-down — everyone"]];
@@ -342,6 +380,13 @@ function parseHM(s) {
   return (h < 24 && mm < 60) ? h*60 + mm : null;
 }
 function fmtHM(mins) { return `${String(Math.floor(mins/60)).padStart(2,"0")}:${String(mins%60).padStart(2,"0")}`; }
+// "19:30" -> "7:30pm" for display; storage and inputs stay HH:MM.
+function fmt12(hm) {
+  const m = parseHM(hm);
+  if (m == null) return hm;
+  const h = Math.floor(m/60);
+  return `${h % 12 || 12}:${String(m%60).padStart(2,"0")}${h < 12 ? "am" : "pm"}`;
+}
 
 let S = { ...DEFAULTS };
 try {
@@ -351,16 +396,18 @@ try {
     const old = JSON.parse(localStorage.getItem("badminton-coach-settings-v1"));
     if (old && typeof old === "object") {
       s = { ...old, players: old.kids };
-      if (Number.isInteger(old.len)) s.finish = fmtHM(18*60 + old.len);
+      if (Number.isInteger(old.len)) s.finish = fmtHM(parseHM(DEFAULTS.start) + old.len);
     }
   }
   if (s && typeof s === "object") {
     ALLFIELDS.forEach(f => { if (Number.isInteger(s[f.k])) S[f.k] = Math.min(f.max, Math.max(f.min, s[f.k])); });
     if (parseHM(s.start) != null) S.start = s.start;
     if (parseHM(s.finish) != null) S.finish = s.finish;
+    if (s.oddMode === "own" || s.oddMode === "merge") S.oddMode = s.oddMode;
   }
 } catch {}
 if (S.coached > S.courts) S.coached = S.courts;
+if (S.cap < S.group) S.cap = S.group;
 
 // plan = tonight's drills: [{k, place}] where place is start|rounds|end.
 let plan = [];
@@ -391,12 +438,31 @@ function toast(msg) {
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1600);
 }
 
+// How players split into groups, honouring the odd-players setting: a
+// leftover either forms its own small group, or merges into the others up
+// to the max cap — falling back to its own group if it can't fully fit.
+function groupSizes(n) {
+  if (n <= 0) return [];
+  const base = Math.floor(n / S.group), rem = n % S.group;
+  const sizes = Array(base).fill(S.group);
+  if (rem) {
+    if (S.oddMode === "merge" && base && rem <= base * (S.cap - S.group)) {
+      let left = rem;
+      for (let i = 0; i < sizes.length && left; i++) {
+        const add = Math.min(S.cap - sizes[i], left);
+        sizes[i] += add; left -= add;
+      }
+    } else sizes.push(rem);
+  }
+  return sizes;
+}
+
 // The rotation maths. Everything on the Plan tab derives from this.
 function calc() {
   const startM = parseHM(S.start), finishM = parseHM(S.finish);
   const len = (startM != null && finishM != null) ? finishM - startM : 0;
-  const groups = Math.ceil(S.players / S.group);
-  const lastGroup = S.players - (groups - 1) * S.group;
+  const sizes = groupSizes(S.players);
+  const groups = sizes.length;
   const courtsUsed = Math.min(S.coached, groups);
   const rounds = Math.ceil(groups / courtsUsed);
   // One water/swap break before each round (except a round that opens the
@@ -406,7 +472,7 @@ function calc() {
   const slot = Math.floor(drillTime / rounds);
   const spare = drillTime - slot * rounds;
   const lastRoundCourts = groups - (rounds - 1) * courtsUsed;
-  return { len, groups, lastGroup, courtsUsed, rounds, graceCount, drillTime, slot, spare, lastRoundCourts,
+  return { len, sizes, groups, courtsUsed, rounds, graceCount, drillTime, slot, spare, lastRoundCourts,
            valid: len > 0 && drillTime > 0 && slot >= 1 };
 }
 
@@ -426,9 +492,19 @@ setTab.current = "plan";
 function adjust(k, dir) {
   const f = ALLFIELDS.find(x => x.k === k);
   S[k] = Math.min(f.max, Math.max(f.min, S[k] + dir * f.step));
-  // Can't coach on more courts than exist.
+  // Can't coach on more courts than exist, and merged groups can't be
+  // capped below the target group size.
   if (S.coached > S.courts) S.coached = S.courts;
-  persistS(); renderPlan(); renderBar();
+  if (S.cap < S.group) S.cap = S.group;
+  persistS();
+  if (run && ["players","group","coached","courts","cap","grace"].includes(k)) rebuildFutureRounds();
+  renderPlan(); renderBar();
+}
+function setOdd(m) {
+  S.oddMode = m;
+  persistS();
+  if (run) rebuildFutureRounds();
+  renderPlan(); renderBar();
 }
 function setTime(k, v) {
   if (parseHM(v) == null) return;
@@ -455,18 +531,26 @@ function renderPlan() {
       <div class="lab">Finish time<small>the night is planned back from this</small></div>
       <input type="time" value="${S.finish}" onchange="setTime('finish',this.value)">
     </div>` + FIELDS.map(stepRow).join("");
-  document.getElementById("extras").innerHTML = EXTRAS.map(stepRow).join("");
+  document.getElementById("extras").innerHTML = EXTRAS.map(stepRow).join("") + `
+    <div class="step">
+      <div class="lab">Odd players<small>when numbers don't divide into groups evenly</small></div>
+      <div class="seg">
+        <button class="${S.oddMode==="own"?"on":""}" onclick="setOdd('own')">Own group</button>
+        <button class="${S.oddMode==="merge"?"on":""}" onclick="setOdd('merge')">Merge in</button>
+      </div>
+    </div>`;
 
   const c = calc();
-  const groupsTxt = c.lastGroup === S.group || c.groups === 1
-    ? `${c.groups} group${c.groups===1?"":"s"} of ${Math.min(S.group, S.players)}`
-    : `${c.groups} groups of ${S.group} (last one has ${c.lastGroup})`;
+  const uniform = c.sizes.every(x => x === c.sizes[0]);
+  const groupsTxt = uniform
+    ? `${c.groups} group${c.groups===1?"":"s"} of ${c.sizes[0]}`
+    : `${c.groups} groups — ${c.sizes.join(" · ")}`;
   const rows = [
-    ["Session", c.len > 0 ? `${c.len} min (${S.start}–${S.finish})` : "finish must be after the start"],
+    ["Session", c.len > 0 ? `${c.len} min (${fmt12(S.start)}–${fmt12(S.finish)})` : "finish must be after the start"],
     ["Groups", groupsTxt],
     ["Game courts", `${Math.max(0, S.courts - S.coached)} of ${S.courts} — players not in drills play here`],
     ["Rounds", `${c.rounds} × ${c.valid ? c.slot : "–"} min`],
-    ["Per player", c.valid ? `${c.slot} min of coaching` : "–"],
+    ["Per player", c.valid ? `${c.slot} min in drills — roughly ${Math.max(1, Math.round(c.slot / S.group))} min each on the coach's feed` : "–"],
     ["Breaks", S.grace > 0 ? `${c.graceCount} × ${S.grace} min for water and swaps` : "none"],
     ["Spare", c.valid ? `${c.spare} min` : "–"]
   ];
@@ -474,8 +558,8 @@ function renderPlan() {
   if (c.len <= 0) warn = `<div class="warn bad">Finish time must be after the start time.</div>`;
   else if (!c.valid) warn = `<div class="warn bad">No time left for drills — warm-up, warm-down and breaks don't fit in ${c.len} minutes with ${c.rounds} rounds.</div>`;
   else if (c.slot < 6) warn = `<div class="warn">Rounds of ${c.slot} min are very short. Bigger groups, another drill court, or a shorter warm-up would give each group more time.</div>`;
-  else if (c.slot > 20) warn = `<div class="warn">Rounds of ${c.slot} min are long for one drill — plan two activities per round, or use smaller groups for shorter rounds.</div>`;
   if (c.valid && c.lastRoundCourts < c.courtsUsed) warn += `<div class="warn">The last round only fills ${c.lastRoundCourts} of ${S.coached} drill courts — a coach gets a breather.</div>`;
+  if (plan.filter(p => p.place === "rounds").length > 1) warn += `<div class="warn">Only one drill runs in the rounds — the first one. Move the others to Start or End.</div>`;
   if (plan.some(p => p.place === "start") && S.wu === 0) warn += `<div class="warn">Warm-up drills are planned but the warm-up is 0 minutes — they won't run.</div>`;
   if (plan.some(p => p.place === "end") && S.wd === 0) warn += `<div class="warn">Warm-down drills are planned but the warm-down is 0 minutes — they won't run.</div>`;
   document.getElementById("summary").innerHTML =
@@ -503,8 +587,8 @@ function renderPlan() {
         </div>`;
       }).join("");
     }).join("") + `<p class="thint">${nR
-      ? `Rounds are split across the ${nR} round drill${nR===1?"":"s"} in order. Tap the chip to move a drill; warm-up/warm-down time splits evenly across their drills.`
-      : `No drills placed in the rounds yet — tap a chip to move one there.`}</p>`;
+      ? `The rounds drill runs on the drill courts all night — adding another drill from the library swaps it. Warm-up and warm-down time splits evenly across their drills.`
+      : `No drill in the rounds yet — tap a chip to move one there.`}</p>`;
   }
 }
 
@@ -524,15 +608,28 @@ function addDrill(key) {
   if (i >= 0) { plan.splice(i, 1); toast("Removed from tonight"); }
   else {
     const place = defaultPlace(key);
+    if (place === "rounds") {
+      // One drill in the rounds for now — a new pick swaps the old one out.
+      const ex = plan.findIndex(p => p.place === "rounds");
+      if (ex >= 0) {
+        const old = DRILLS.find(d => d.key === plan[ex].k);
+        plan.splice(ex, 1);
+        toast(`Rounds drill swapped — ${old.name} removed`);
+      } else toast("Added to rounds");
+    } else toast("Added to warm-up");
     plan.push({ k: key, place });
-    toast(place === "start" ? "Added to warm-up" : "Added to rounds");
   }
   persistPlan(); renderDrills();
 }
 function removeDrill(i) { plan.splice(i, 1); persistPlan(); renderPlan(); }
 function cyclePlace(i) {
   const order = ["start","rounds","end"];
-  plan[i].place = order[(order.indexOf(plan[i].place) + 1) % order.length];
+  let next = order[(order.indexOf(plan[i].place) + 1) % order.length];
+  if (next === "rounds" && plan.some((p, j) => j !== i && p.place === "rounds")) {
+    next = "end";
+    toast("Rounds already has a drill — moved to warm-down");
+  }
+  plan[i].place = next;
   persistPlan(); renderPlan();
 }
 function movePlan(i, dir) {
@@ -598,9 +695,10 @@ function buildSeq() {
       seq.push({ type:"open", label:"Warm-up", sub:"Everyone together", secs:S.wu*60, drill:null });
     }
   }
+  const roundDrill = roundDrills.length ? roundDrills[0].k : null;
   for (let r = 0; r < c.rounds; r++) {
     if (S.grace > 0 && seq.length) seq.push({ type:"grace" });
-    seq.push({ type:"round", drill: roundDrills.length ? roundDrills[Math.floor(r * roundDrills.length / c.rounds)].k : null });
+    seq.push({ type:"round", drill: roundDrill, pull: c.sizes.slice(r * c.courtsUsed, (r + 1) * c.courtsUsed) });
   }
   if (S.wd > 0) {
     if (S.grace > 0) seq.push({ type:"grace" });
@@ -709,6 +807,33 @@ function pauseResume() {
   else { run.remaining = run.endsAt - Date.now(); run.paused = true; }
   persistRun(); renderRun(); renderBar();
 }
+// Player numbers changed mid-session: rebuild the rounds that haven't run
+// yet from whoever still hasn't been coached, keeping the warm-down. Round
+// lengths sort themselves out — they're computed from the clock on entry.
+function rebuildFutureRounds() {
+  if (!run || run.seq[run.i].type === "close") return;
+  let coachedSoFar = 0;
+  for (let j = 0; j <= run.i; j++) {
+    if (run.seq[j].type === "round") coachedSoFar += (run.seq[j].pull || [S.group]).reduce((a, b) => a + b, 0);
+  }
+  const sizes = groupSizes(Math.max(0, S.players - coachedSoFar));
+  const courtsUsed = Math.min(S.coached, Math.max(1, sizes.length));
+  const roundDrill = (plan.find(p => p.place === "rounds") || {}).k || null;
+  const head = run.seq.slice(0, run.i + 1);
+  const closes = run.seq.slice(run.i + 1).filter(b => b.type === "close");
+  const mid = [];
+  const rounds = sizes.length ? Math.ceil(sizes.length / courtsUsed) : 0;
+  for (let r = 0; r < rounds; r++) {
+    if (S.grace > 0 && !(r === 0 && run.seq[run.i].type === "grace")) mid.push({ type:"grace" });
+    mid.push({ type:"round", drill: roundDrill, pull: sizes.slice(r * courtsUsed, (r + 1) * courtsUsed) });
+  }
+  if (closes.length && S.grace > 0 && mid.length) mid.push({ type:"grace" });
+  run.seq = head.concat(mid, closes);
+  persistRun();
+  if (setTab.current === "run") renderRun();
+  renderBar();
+  toast(rounds ? `${rounds} round${rounds === 1 ? "" : "s"} still to run` : "No rounds left to run");
+}
 function cutRound() {
   if (!run) return;
   const future = run.seq.map((b, j) => b.type === "round" && j > run.i ? j : -1).filter(j => j > 0);
@@ -756,14 +881,20 @@ function updateClock(ms) {
   }
 }
 
+function pullTxt(pull) {
+  return pull && pull.length ? pull.join(" + ") : String(S.group);
+}
 function blockInfo(i) {
   const b = run.seq[i];
   if (b.type === "round") {
     const total = run.seq.filter(x => x.type === "round").length;
     const k = run.seq.slice(0, i + 1).filter(x => x.type === "round").length;
-    return { label:`Drill round ${k} of ${total}`, sub:`Pull ${S.group} players per drill court · rest play on game courts`, drill:b.drill };
+    return { label:`Drill round ${k} of ${total}`, sub:`Pull ${pullTxt(b.pull)} players · rest play on game courts`, drill:b.drill };
   }
-  if (b.type === "grace") return { label:"Water + swap", sub:"Drink up — next group to the drill courts", drill:null };
+  if (b.type === "grace") {
+    const nextRound = run.seq.slice(i + 1).find(x => x.type === "round");
+    return { label:"Water + swap", sub: nextRound ? `Drink up — grab ${pullTxt(nextRound.pull)} for the drill courts` : "Drink up — warm-down next", drill:null };
+  }
   return { label:b.label, sub:b.sub, drill:b.drill };
 }
 
@@ -785,7 +916,7 @@ function renderRun() {
       <div class="blab">${info.label}</div>
       <div class="bsub">${info.sub}</div>
       <div class="bigtime" id="bigtime">–:––</div>
-      <div class="bprog">Block ${run.i+1} of ${run.seq.length} · finishes ${S.finish}</div>
+      <div class="bprog">Block ${run.i+1} of ${run.seq.length} · finishes ${fmt12(S.finish)}</div>
       <div class="overhint hidden" id="overhint">Time's up — tap Next when the groups have swapped</div>
       <div class="nextup">${nx ? `Next: <b>${nx.label}</b>${nx.drill ? ` — ${DRILLS.find(x=>x.key===nx.drill).name}` : ""}` : "Last block — home time after this"}</div>
     </div>
@@ -812,7 +943,7 @@ function renderBar() {
       <div class="gchip" id="minitime">–:––</div>
       <div class="meta">
         <div class="l1">${info.label}</div>
-        <div class="l2">Block ${run.i+1}/${run.seq.length} · finishes ${S.finish}</div>
+        <div class="l2">Block ${run.i+1}/${run.seq.length} · finishes ${fmt12(S.finish)}</div>
       </div>
       <button class="btn ctl" onclick="pauseResume()">${run.paused ? "Resume" : "Pause"}</button>
       <button class="btn go" onclick="nextBlock()">Next</button>
