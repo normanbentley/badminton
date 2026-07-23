@@ -44,8 +44,8 @@
   .step { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
   .step .lab { flex: 1; font-size: 14px; }
   .step .lab small { display: block; font-size: 12px; color: #a8a29e; }
-  .step .pm { width: 40px; height: 40px; border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: 20px; font-weight: 600; color: #57534e; cursor: pointer; }
-  .step .pm:active { background: var(--faint); }
+  .step .pm, .runplayers .pm { width: 40px; height: 40px; border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: 20px; font-weight: 600; color: #57534e; cursor: pointer; }
+  .step .pm:active, .runplayers .pm:active { background: var(--faint); }
   .step .val { width: 56px; text-align: center; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .step input[type="time"] { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 15px; font-weight: 700; color: var(--ink); }
   .seg { display: flex; gap: 4px; background: #e7e5e4; border-radius: 10px; padding: 3px; flex: 0 0 auto; }
@@ -126,6 +126,18 @@
   .nextup { font-size: 13px; color: var(--mut); border-top: 1px solid var(--faint); margin-top: 12px; padding-top: 10px; }
   .nextup b { font-weight: 600; color: #44403c; }
   .cutbtn { display: block; width: 100%; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .runplayers { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; font-size: 14px; }
+  .runplayers .rl { flex: 1; color: #57534e; font-weight: 600; }
+  .runplayers b { min-width: 32px; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .endbtn { display: block; width: 100%; border-radius: 12px; padding: 12px; margin-bottom: 12px; color: #dc2626; border-color: #fecaca; }
+  .upcard { border: 1px solid var(--line); background: #fff; border-radius: 16px; margin-bottom: 12px; padding: 6px 14px 10px; }
+  .upcard h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #a8a29e; margin: 8px 0 4px; font-weight: 700; }
+  .up { display: flex; gap: 8px; padding: 5px 0; font-size: 13px; align-items: baseline; border-top: 1px solid var(--faint); }
+  .up:first-of-type { border-top: 0; }
+  .up .ut { color: #a8a29e; min-width: 56px; font-variant-numeric: tabular-nums; }
+  .up .ul { flex: 1; color: #44403c; font-weight: 500; }
+  .up .um { color: #a8a29e; }
+  .up.brk .ul { color: #a8a29e; font-weight: 400; }
   .empty { margin-top: 24px; border: 1px dashed #d6d3d1; background: #fff; border-radius: 16px; padding: 40px 16px; text-align: center; }
   .empty p { margin: 0; }
   .empty .b { font-weight: 600; color: #57534e; }
@@ -186,7 +198,7 @@
         <ol>
           <li><b>Plan the night.</b> Set the times and player numbers above — the app works out the groups, the rounds, and how long each group gets on a drill court.</li>
           <li><b>Pick drills.</b> Add them from the Drills tab. Tap the chip on each one to choose where it runs: warm-up (Start), the drill courts (Rounds), or warm-down (End).</li>
-          <li><b>Run it.</b> Tap Start and follow the big timer. When a round's time is up it chimes — swap the groups and tap <b>Next</b>. The water break tells you exactly how many players to grab. (<b>Sim</b> rehearses the whole night in about a minute.)</li>
+          <li><b>Run it.</b> Tap Start and follow the big timer. When a round's time is up it chimes — swap the groups and tap <b>Next</b>. The water break tells you exactly how many players to grab. (<b>Sim</b> rehearses the whole night in about 90 seconds.)</li>
           <li><b>Things change? Fine.</b> Running late shortens the remaining rounds automatically so the night still ends on time. Extra players walked in? Bump the head count on this tab, even mid-session.</li>
         </ol>
         <details class="fine">
@@ -529,6 +541,7 @@ function adjust(k, dir) {
   persistS();
   if (run && ["players","group","coached","courts","cap","grace"].includes(k)) rebuildFutureRounds();
   renderPlan(); renderBar();
+  if (run && setTab.current === "run") renderRun();
 }
 function setSound(k) {
   S.sound = k;
@@ -803,7 +816,7 @@ function start(simulate) {
   if (!c.valid) { toast("Fix the timings first — see the Plan tab"); return; }
   let sessionEnd, speed = 1;
   if (simulate) {
-    speed = c.len;   // any night compresses to roughly 60 real seconds
+    speed = Math.max(1, Math.round(c.len * 2 / 3));   // ~90 real seconds per night
     sessionEnd = Date.now() + c.len * 60000 / speed;
   } else {
     const fin = parseHM(S.finish);
@@ -1003,6 +1016,42 @@ function blockInfo(i) {
   return { label:b.label, sub:b.sub, drill:b.drill };
 }
 
+// Projected wall-clock time for a moment in the run; simulations show the
+// clock times the real night would have, counted back from the finish.
+function clockAt(epoch) {
+  if (spd() > 1) {
+    const finM = parseHM(S.finish) ?? 0;
+    const remSim = (run.sessionEnd - epoch) * spd() / 60000;
+    return fmt12(fmtHM(((Math.round(finM - remSim)) % 1440 + 1440) % 1440));
+  }
+  const d = new Date(epoch);
+  return fmt12(`${d.getHours()}:${String(d.getMinutes()).padStart(2,"0")}`);
+}
+
+// The rest of the night: projected start time, label, drill and length of
+// every block still to come. Rounds use the same elastic estimate the run
+// itself will use, so the projection matches reality at this moment.
+function upcomingHTML() {
+  if (!run || run.i + 1 >= run.seq.length) return "";
+  let t = run.paused && Number.isFinite(run.remaining) ? Date.now() + run.remaining : run.endsAt;
+  const rows = [];
+  for (let j = run.i + 1; j < run.seq.length; j++) {
+    const b = run.seq[j];
+    const dur = b.type === "grace" ? minMs(S.grace)
+      : b.type === "round" ? roundSlotMs(j, t)
+      : b.secs * 1000 / spd();
+    const info = blockInfo(j);
+    const mins = Math.max(1, Math.round(dur * spd() / 60000));
+    rows.push(`<div class="up${b.type === "grace" ? " brk" : ""}">
+      <span class="ut">${clockAt(t)}</span>
+      <span class="ul">${info.label}${b.drill ? ` — ${DRILLS.find(x => x.key === b.drill).name}` : ""}</span>
+      <span class="um">${mins}m</span>
+    </div>`);
+    t += dur;
+  }
+  return `<div class="upcard"><h3>Coming up</h3>${rows.join("")}</div>`;
+}
+
 function renderRun() {
   const el = document.getElementById("view-run");
   if (!run) {
@@ -1025,6 +1074,12 @@ function renderRun() {
       <div class="overhint hidden" id="overhint">Time's up — tap Next when the groups have swapped</div>
       <div class="nextup">${nx ? `Next: <b>${nx.label}</b>${nx.drill ? ` — ${DRILLS.find(x=>x.key===nx.drill).name}` : ""}` : "Last block — home time after this"}</div>
     </div>
+    <div class="runplayers">
+      <span class="rl">Players tonight</span>
+      <button class="pm" onclick="adjust('players',-1)" aria-label="fewer players">−</button>
+      <b>${S.players}</b>
+      <button class="pm" onclick="adjust('players',1)" aria-label="more players">+</button>
+    </div>
     ${futureRounds ? `<button class="cutbtn" onclick="cutRound()">Cut a round — ${futureRounds} still to come</button>` : ""}
     ${d ? `<div class="drill">
       <div class="dhead" style="cursor:default">
@@ -1036,7 +1091,9 @@ function renderRun() {
         <div class="sec"><b>Easier group</b>${d.easier}</div>
         <div class="sec"><b>Stronger group</b>${d.harder}</div>
       </div>
-    </div>` : ""}`;
+    </div>` : ""}
+    ${upcomingHTML()}
+    <button class="ctl endbtn" onclick="endSession()">End session</button>`;
   tickNow();
 }
 
@@ -1051,8 +1108,7 @@ function renderBar() {
         <div class="l2">Block ${run.i+1}/${run.seq.length} · ${run.speed > 1 ? `SIM ${run.speed}×` : `finishes ${fmt12(S.finish)}`}</div>
       </div>
       <button class="btn ctl" onclick="pauseResume()">${run.paused ? "Resume" : "Pause"}</button>
-      <button class="btn go" onclick="nextBlock()">Next</button>
-      <button class="btn ctl end" onclick="endSession()">End</button>`;
+      <button class="btn go" onclick="nextBlock()">Next</button>`;
     tickNow();
   } else {
     const c = calc();
