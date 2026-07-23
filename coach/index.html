@@ -140,6 +140,7 @@
   .go { background: var(--accent); color: #fff; padding: 14px 20px; font-size: 14px; flex: 0 0 auto; }
   .go:disabled { opacity: .4; }
   .ctl { border: 1px solid var(--line); background: #fff; color: #57534e; padding: 13px 12px; font-size: 14px; font-weight: 600; flex: 0 0 auto; }
+  .ctl:disabled { opacity: .4; }
   .ctl.end { color: #dc2626; border-color: #fecaca; }
   .toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
@@ -185,7 +186,7 @@
         <ol>
           <li><b>Plan the night.</b> Set the times and player numbers above — the app works out the groups, the rounds, and how long each group gets on a drill court.</li>
           <li><b>Pick drills.</b> Add them from the Drills tab. Tap the chip on each one to choose where it runs: warm-up (Start), the drill courts (Rounds), or warm-down (End).</li>
-          <li><b>Run it.</b> Tap Start and follow the big timer. When a round's time is up it chimes — swap the groups and tap <b>Next</b>. The water break tells you exactly how many players to grab.</li>
+          <li><b>Run it.</b> Tap Start and follow the big timer. When a round's time is up it chimes — swap the groups and tap <b>Next</b>. The water break tells you exactly how many players to grab. (<b>Sim</b> rehearses the whole night in about a minute.)</li>
           <li><b>Things change? Fine.</b> Running late shortens the remaining rounds automatically so the night still ends on time. Extra players walked in? Bump the head count on this tab, even mid-session.</li>
         </ol>
         <details class="fine">
@@ -375,7 +376,7 @@ const PLANKEY = "badminton-coach-plan-v2";
 const RUNKEY = "badminton-coach-run-v2";
 
 // S = the numbers the maths runs on. Steppers and time inputs edit these.
-const DEFAULTS = { start:"17:30", finish:"19:00", wu:10, wd:5, players:16, group:4, courts:4, coached:2, grace:1, cap:5, oddMode:"own", rotView:"list", sound:"beep" };
+const DEFAULTS = { start:"17:30", finish:"19:00", wu:10, wd:5, players:16, group:4, courts:4, coached:2, grace:1, cap:5, oddMode:"own", rotView:"visual", sound:"beep" };
 const FIELDS = [
   { k:"wu", lab:"Warm-up", sub:"minutes, everyone together", step:5, min:0, max:30 },
   { k:"wd", lab:"Warm-down", sub:"minutes at the end", step:5, min:0, max:30 },
@@ -532,7 +533,7 @@ function adjust(k, dir) {
 function setSound(k) {
   S.sound = k;
   persistS();
-  initAudio(); chime(2);   // instant preview, exactly as heard at time-up
+  initAudio(); chime(4);   // instant preview, exactly as heard at time-up
   renderPlan();
 }
 function setOdd(m) {
@@ -791,17 +792,29 @@ function buildSeq() {
   return seq;
 }
 
-function start() {
+// Simulation support: a run carries a speed multiplier (1 = real time).
+// Every minute→ms conversion goes through these, so a simulated night is
+// the identical machine compressed — chimes, breaks, redistribution, all.
+function spd() { return (run && run.speed) || 1; }
+function minMs(m) { return m * 60000 / spd(); }
+
+function start(simulate) {
   const c = calc();
   if (!c.valid) { toast("Fix the timings first — see the Plan tab"); return; }
-  const fin = parseHM(S.finish);
-  const d = new Date(); d.setHours(Math.floor(fin/60), fin%60, 0, 0);
-  let sessionEnd = d.getTime();
-  if (sessionEnd <= Date.now()) {
-    sessionEnd = Date.now() + c.len*60000;
-    toast("Finish time already passed — running the planned length instead");
+  let sessionEnd, speed = 1;
+  if (simulate) {
+    speed = c.len;   // any night compresses to roughly 60 real seconds
+    sessionEnd = Date.now() + c.len * 60000 / speed;
+  } else {
+    const fin = parseHM(S.finish);
+    const d = new Date(); d.setHours(Math.floor(fin/60), fin%60, 0, 0);
+    sessionEnd = d.getTime();
+    if (sessionEnd <= Date.now()) {
+      sessionEnd = Date.now() + c.len*60000;
+      toast("Finish time already passed — running the planned length instead");
+    }
   }
-  run = { seq: buildSeq(), i:0, endsAt:0, sessionEnd, paused:false, remaining:null };
+  run = { seq: buildSeq(), i:0, endsAt:0, sessionEnd, speed, paused:false, remaining:null };
   initAudio(); requestWake();
   enterBlock(0);
   setTab("run");
@@ -811,18 +824,18 @@ function roundSlotMs(i, now) {
   const roundsLeft = run.seq.slice(i).filter(b => b.type === "round").length;
   const after = run.seq.slice(i + 1);
   const graceLeft = after.filter(b => b.type === "grace").length;
-  const fixedLeft = after.reduce((a, b) => a + (b.secs || 0), 0) * 1000;
-  const avail = run.sessionEnd - now - fixedLeft - graceLeft * S.grace * 60000;
-  return Math.max(60000, Math.floor(avail / roundsLeft));
+  const fixedLeft = after.reduce((a, b) => a + (b.secs || 0), 0) * 1000 / spd();
+  const avail = run.sessionEnd - now - fixedLeft - graceLeft * minMs(S.grace);
+  return Math.max(minMs(1), Math.floor(avail / roundsLeft));
 }
 
 function enterBlock(i) {
   run.i = i;
   const b = run.seq[i];
   const now = Date.now();
-  if (b.type === "grace") run.endsAt = now + S.grace * 60000;
+  if (b.type === "grace") run.endsAt = now + minMs(S.grace);
   else if (b.type === "round") run.endsAt = now + roundSlotMs(i, now);
-  else run.endsAt = now + b.secs * 1000;
+  else run.endsAt = now + b.secs * 1000 / spd();
   b.chimed = false;
   run.paused = false; run.remaining = null;
   persistRun(); renderRun(); renderBar();
@@ -863,7 +876,7 @@ function chime(n) {
       }
     }
   } catch {}
-  try { navigator.vibrate && navigator.vibrate([200,100,200]); } catch {}
+  try { navigator.vibrate && navigator.vibrate([200,100,200,100,200,100,400]); } catch {}
 }
 async function requestWake() {
   try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
@@ -881,12 +894,12 @@ function tick() {
   const rem = run.endsAt - Date.now();
   if (rem <= 0 && b.type === "grace") {
     // Breaks advance themselves; everything else waits for the coach.
-    chime(2);
+    chime(4);
     if (run.i + 1 >= run.seq.length) finish();
     else enterBlock(run.i + 1);
     return;
   }
-  if (rem <= 0 && !b.chimed) { b.chimed = true; chime(2); persistRun(); }
+  if (rem <= 0 && !b.chimed) { b.chimed = true; chime(4); persistRun(); }
   updateClock(rem);
 }
 setInterval(tick, 250);
@@ -941,7 +954,7 @@ function endSession() {
   finish();
 }
 function finish() {
-  chime(3);
+  chime(5);
   run = null; persistRun(); releaseWake();
   renderRun(); renderBar();
   toast("Session done — good work");
@@ -952,8 +965,10 @@ function tickNow() {
   updateClock(run.paused ? run.remaining : run.endsAt - Date.now());
 }
 function updateClock(ms) {
-  const over = ms < 0;
-  const sec = Math.ceil(Math.abs(ms) / 1000);
+  // Display simulated time: a 36-minute round shows 36:00, ticking fast.
+  const disp = ms * spd();
+  const over = disp < 0;
+  const sec = Math.ceil(Math.abs(disp) / 1000);
   const txt = `${over ? "+" : ""}${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}`;
   const el = document.getElementById("bigtime");
   if (el) {
@@ -1006,7 +1021,7 @@ function renderRun() {
       <div class="blab">${info.label}</div>
       <div class="bsub">${info.sub}</div>
       <div class="bigtime" id="bigtime">–:––</div>
-      <div class="bprog">Block ${run.i+1} of ${run.seq.length} · finishes ${fmt12(S.finish)}</div>
+      <div class="bprog">Block ${run.i+1} of ${run.seq.length} · ${run.speed > 1 ? `SIMULATION ${run.speed}×` : `finishes ${fmt12(S.finish)}`}</div>
       <div class="overhint hidden" id="overhint">Time's up — tap Next when the groups have swapped</div>
       <div class="nextup">${nx ? `Next: <b>${nx.label}</b>${nx.drill ? ` — ${DRILLS.find(x=>x.key===nx.drill).name}` : ""}` : "Last block — home time after this"}</div>
     </div>
@@ -1033,7 +1048,7 @@ function renderBar() {
       <div class="gchip" id="minitime">–:––</div>
       <div class="meta">
         <div class="l1">${info.label}</div>
-        <div class="l2">Block ${run.i+1}/${run.seq.length} · finishes ${fmt12(S.finish)}</div>
+        <div class="l2">Block ${run.i+1}/${run.seq.length} · ${run.speed > 1 ? `SIM ${run.speed}×` : `finishes ${fmt12(S.finish)}`}</div>
       </div>
       <button class="btn ctl" onclick="pauseResume()">${run.paused ? "Resume" : "Pause"}</button>
       <button class="btn go" onclick="nextBlock()">Next</button>
@@ -1047,6 +1062,7 @@ function renderBar() {
         <div class="l1">${c.groups} group${c.groups===1?"":"s"} · ${c.rounds} round${c.rounds===1?"":"s"}</div>
         <div class="l2">${c.valid ? `each player gets ${c.slot} min of drills` : "timings don't fit"}</div>
       </div>
+      <button class="btn ctl" onclick="start(true)" ${c.valid ? "" : "disabled"}>Sim</button>
       <button class="btn go" onclick="start()" ${c.valid ? "" : "disabled"}>Start</button>`;
   }
 }
