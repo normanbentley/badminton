@@ -156,6 +156,17 @@
   .ctl.end { color: #dc2626; border-color: #fecaca; }
   .toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
+  .toast.act { pointer-events: auto; }
+  .toast .tbtn { margin-left: 8px; border: 0; background: #57534e; color: #fff; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .drift { font-size: 12px; color: #a8a29e; margin-top: 2px; min-height: 15px; }
+  .drift.behind { color: #b45309; font-weight: 600; }
+  .drift.ahead { color: #15803d; }
+  .shuffle, .listbtn { display: block; width: 100%; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; margin: 0 0 10px; cursor: pointer; }
+  .deckbtns { display: flex; gap: 8px; margin: 0 0 10px; }
+  .deckbtns button { flex: 1; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .deckbtns .skip { border: 1px solid var(--line); background: #fff; color: #57534e; }
+  .deckbtns .take { border: 0; background: var(--accent); color: #fff; }
+  .deckmeta { text-align: center; font-size: 12px; color: #a8a29e; margin: 0 0 10px; }
   .hidden { display: none !important; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -197,8 +208,8 @@
       <div class="gbody">
         <ol>
           <li><b>Plan the night.</b> Set the times and player numbers above — the app works out the groups, the rounds, and how long each group gets on a drill court.</li>
-          <li><b>Pick drills.</b> Add them from the Drills tab. Tap the chip on each one to choose where it runs: warm-up (Start), the drill courts (Rounds), or warm-down (End).</li>
-          <li><b>Run it.</b> Tap Start and follow the big timer. When a round's time is up it chimes — swap the groups and tap <b>Next</b>. The water break tells you exactly how many players to grab. (<b>Sim</b> rehearses the whole night in about 90 seconds.)</li>
+          <li><b>Pick drills.</b> Add them from the Drills tab — browse the list, or tap <b>Shuffle</b> to be dealt one drill at a time. Tap the chip on each one to choose where it runs: warm-up (Start), the drill courts (Rounds), or warm-down (End).</li>
+          <li><b>Run it.</b> Tap Start and follow the big timer. When a round's time is up it chimes — swap the groups and tap <b>Next</b>. Tapped Next by mistake? The toast offers <b>Undo</b> for a few seconds. The water break tells you exactly how many players to grab. (<b>Sim</b> rehearses the whole night in about 90 seconds.)</li>
           <li><b>Things change? Fine.</b> Running late shortens the remaining rounds automatically so the night still ends on time. Extra players walked in? Bump the head count on this tab, even mid-session.</li>
         </ol>
         <details class="fine">
@@ -207,7 +218,7 @@
           <p>Players ÷ group size = groups. Groups ÷ drill courts = rounds. Round length = time left after warm-up, warm-down and breaks, shared equally. Odd leftover players form their own small group (default) or merge into the others up to a max size — see More settings.</p>
           <h3>The timing</h3>
           <p>The night is anchored to the finish time. Each round's length is worked out the moment it starts, from the time left. Held up 5 minutes? The remaining rounds each get a bit shorter. Finished early? They get longer. The warm-down is never shortened.</p>
-          <p>Rounds never advance themselves — the clock counts up in red until you tap Next, so a chat with a parent can't derail the schedule. Badly behind? <b>Cut a round</b>: one group misses drills, the rest keep round lengths worth having.</p>
+          <p>Rounds never advance themselves — the clock counts up in red until you tap Next, so a chat with a parent can't derail the schedule. The run screen shows how far the night is ahead of or behind the original plan. Badly behind? <b>Cut a round</b>: one group misses drills, the rest keep round lengths worth having.</p>
           <h3>Drills</h3>
           <p>The rounds hold one drill for now — picking another from the library swaps it. Warm-up and warm-down split their minutes evenly across their drills. Every drill has an easier and harder variation for weaker and stronger groups.</p>
         </details>
@@ -466,17 +477,23 @@ function defaultPlace(key) {
   return d && d.cat === "warmup" ? "start" : "rounds";
 }
 
-let run = null;   // { seq, i, endsAt, sessionEnd, paused, remaining }
+let run = null;   // { seq, i, endsAt, sessionEnd, speed, paused, remaining, plannedLen, blockStart }
+let undoInfo = null;  // pre-Next snapshot of run, offered back briefly on the toast
 let catFilter = "all", lvFilter = "all", expandedDrill = null, expandedTonight = null, placePicker = null;
+let deck = null, deckX = null, deckY = null;   // one-at-a-time drill browsing
 let audio = null, wakeLock = null;
 
 function persistS() { try { localStorage.setItem(SETKEY, JSON.stringify(S)); } catch {} }
 function persistPlan() { try { localStorage.setItem(PLANKEY, JSON.stringify(plan)); } catch {} }
 function persistRun() { try { run ? localStorage.setItem(RUNKEY, JSON.stringify(run)) : localStorage.removeItem(RUNKEY); } catch {} }
-function toast(msg) {
+const UNDO_MS = 6000;
+function toast(msg, undoable) {
   const t = document.getElementById("toast");
-  t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1600);
+  if (undoable) t.innerHTML = `${msg}<button class="tbtn" onclick="undoNext()">Undo</button>`;
+  else t.textContent = msg;
+  t.classList.toggle("act", !!undoable);
+  t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), undoable ? UNDO_MS : 1600);
 }
 
 // How players split into groups, honouring the odd-players setting: a
@@ -744,7 +761,34 @@ function renderDrills() {
 
   const list = DRILLS.filter(d =>
     (catFilter==="all" || d.cat===catFilter) && (lvFilter==="all" || d.lv.includes(lvFilter)));
-  document.getElementById("drilllist").innerHTML = list.length ? list.map(d => {
+  const el = document.getElementById("drilllist");
+  if (deck) {
+    const d = DRILLS.find(x => x.key === deck.keys[deck.pos]);
+    el.innerHTML = d ? `
+      <div class="drill" ontouchstart="deckTS(event)" ontouchend="deckTE(event)">
+        <div class="dhead" style="cursor:default">
+          <div class="n">
+            <b>${d.name}<span class="lv">${d.lv.map(l=>`<i class="${l}">${l}</i>`).join("")}</span></b>
+            <small>${CATS[d.cat]} · ~${d.min} min</small>
+          </div>
+        </div>
+        ${drillBody(d)}
+      </div>
+      <div class="deckbtns">
+        <button class="skip" onclick="deckNext()">Skip</button>
+        <button class="take" onclick="deckAdd()">+ Add tonight</button>
+      </div>
+      <div class="deckmeta">${deck.pos + 1} of ${deck.keys.length} · swipe right to add, left to skip</div>
+      <button class="listbtn" onclick="endDeck()">Back to the full list</button>`
+    : `<div class="empty"><p class="b">${deck.keys.length ? "That's the lot" : "Nothing left to deal"}</p>
+        <p class="s">${deck.keys.length ? `All ${deck.keys.length} shown — shuffle again or browse the list.` : "Every drill matching these filters is already planned tonight."}</p></div>
+      <div class="deckbtns" style="margin-top:12px">
+        <button class="skip" onclick="endDeck()">Full list</button>
+        <button class="take" onclick="startDeck()">Shuffle again</button>
+      </div>`;
+    return;
+  }
+  el.innerHTML = `<button class="shuffle" onclick="startDeck()">Shuffle — see one drill at a time</button>` + (list.length ? list.map(d => {
     const inPlan = plan.some(p => p.k === d.key);
     return `<div class="drill">
       <div class="dhead" onclick="toggleDrill('${d.key}')">
@@ -756,13 +800,42 @@ function renderDrills() {
       </div>
       ${expandedDrill === d.key ? drillBody(d) : ""}
     </div>`;
-  }).join("") : `<div class="empty"><p class="b">Nothing matches those filters</p><p class="s">Try a different type or level.</p></div>`;
+  }).join("") : `<div class="empty"><p class="b">Nothing matches those filters</p><p class="s">Try a different type or level.</p></div>`);
 }
 function setFilter(which, v) {
   if (which === "cat") catFilter = v; else lvFilter = v;
-  renderDrills();
+  if (deck) startDeck(); else renderDrills();
 }
 function toggleDrill(k) { expandedDrill = expandedDrill === k ? null : k; renderDrills(); }
+
+// Deal the filtered library one drill at a time, shuffled, skipping drills
+// already planned tonight. Buttons or a horizontal swipe accept/skip.
+function startDeck() {
+  const keys = DRILLS.filter(d =>
+    (catFilter==="all" || d.cat===catFilter) && (lvFilter==="all" || d.lv.includes(lvFilter)) &&
+    !plan.some(p => p.k === d.key)).map(d => d.key);
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  deck = { keys, pos: 0 };
+  renderDrills();
+}
+function endDeck() { deck = null; renderDrills(); }
+function deckNext() { if (deck && deck.pos < deck.keys.length) { deck.pos++; renderDrills(); } }
+function deckAdd() {
+  if (!deck || deck.pos >= deck.keys.length) return;
+  const k = deck.keys[deck.pos];
+  deck.pos++;
+  addDrill(k);   // toasts, persists, and re-renders the drills view
+}
+function deckTS(e) { const t = e.touches[0]; deckX = t.clientX; deckY = t.clientY; }
+function deckTE(e) {
+  if (deckX == null) return;
+  const t = e.changedTouches[0], dx = t.clientX - deckX, dy = t.clientY - deckY;
+  deckX = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) dx > 0 ? deckAdd() : deckNext();
+}
 
 // ---- Run mode ----
 // Blocks: open/close carry fixed seconds; grace auto-advances; rounds are
@@ -802,6 +875,13 @@ function buildSeq() {
       seq.push({ type:"close", label:"Warm-down", sub:"Everyone together — stretch, collect shuttles, pack up", secs:S.wd*60, drill:null });
     }
   }
+  // Planned timeline for the drift readout: where each block was supposed
+  // to start, in seconds from the session start, per tonight's plan.
+  let off = 0;
+  seq.forEach(b => {
+    b.plannedSecs = b.type === "grace" ? S.grace * 60 : b.type === "round" ? c.slot * 60 : b.secs;
+    b.plannedOff = off; off += b.plannedSecs;
+  });
   return seq;
 }
 
@@ -827,7 +907,8 @@ function start(simulate) {
       toast("Finish time already passed — running the planned length instead");
     }
   }
-  run = { seq: buildSeq(), i:0, endsAt:0, sessionEnd, speed, paused:false, remaining:null };
+  run = { seq: buildSeq(), i:0, endsAt:0, sessionEnd, speed, paused:false, remaining:null, plannedLen: c.len };
+  undoInfo = null;
   initAudio(); requestWake();
   enterBlock(0);
   setTab("run");
@@ -850,16 +931,28 @@ function enterBlock(i) {
   else if (b.type === "round") run.endsAt = now + roundSlotMs(i, now);
   else run.endsAt = now + b.secs * 1000 / spd();
   b.chimed = false;
+  run.blockStart = now;
   run.paused = false; run.remaining = null;
   persistRun(); renderRun(); renderBar();
 }
 
+// A mis-tapped Next is unrecoverable without this: snapshot the run before
+// advancing and offer it back on the toast. One level, short window — the
+// wall clock keeps running either way, so the lost seconds stay lost.
 function nextBlock() {
   if (!run) return;
+  undoInfo = { snap: JSON.parse(JSON.stringify(run)), at: Date.now() };
   chime(1);
-  if (run.i + 1 >= run.seq.length) { finish(); return; }
+  if (run.i + 1 >= run.seq.length) { finish(); toast("Session finished", true); return; }
   enterBlock(run.i + 1);
-  if (setTab.current !== "run") toast(`Now: ${blockInfo(run.i).label}`);
+  toast(`Now: ${blockInfo(run.i).label}`, true);
+}
+function undoNext() {
+  if (!undoInfo || Date.now() - undoInfo.at > UNDO_MS) { undoInfo = null; return; }
+  run = undoInfo.snap; undoInfo = null;
+  requestWake();
+  persistRun(); renderRun(); renderBar();
+  toast(`Back in: ${blockInfo(run.i).label}`);
 }
 
 function initAudio() {
@@ -977,6 +1070,18 @@ function tickNow() {
   if (!run) return;
   updateClock(run.paused ? run.remaining : run.endsAt - Date.now());
 }
+// How far the night is behind (+) or ahead (−) of the plan as built at
+// start: the current position vs where the plan said we'd be. Within a
+// block drift holds steady until the block overruns its planned length,
+// then grows live. Blocks added by a mid-session rebuild carry no planned
+// time, so the readout hides once the original plan stops applying.
+function driftMs() {
+  const b = run.seq[run.i];
+  if (b.plannedOff == null || !Number.isFinite(run.plannedLen) || !Number.isFinite(run.blockStart)) return null;
+  const plannedStart = run.sessionEnd - minMs(run.plannedLen) + b.plannedOff * 1000 / spd();
+  const pos = run.blockStart + Math.min(Date.now() - run.blockStart, b.plannedSecs * 1000 / spd());
+  return pos - plannedStart;
+}
 function updateClock(ms) {
   // Display simulated time: a 36-minute round shows 36:00, ticking fast.
   const disp = ms * spd();
@@ -996,6 +1101,15 @@ function updateClock(ms) {
   if (mini) {
     mini.textContent = txt;
     mini.style.background = run.paused ? "#a8a29e" : over ? "#dc2626" : "var(--accent)";
+  }
+  const dr = document.getElementById("drift");
+  if (dr) {
+    const d = driftMs();
+    const dm = d == null ? 0 : d * spd();
+    const m = Math.round(Math.abs(dm) / 60000);
+    dr.textContent = d == null ? "" : dm >= 60000 ? `${m} min behind plan` : dm <= -60000 ? `${m} min ahead of plan` : "on schedule";
+    dr.classList.toggle("behind", dm >= 60000);
+    dr.classList.toggle("ahead", dm <= -60000);
   }
 }
 
@@ -1071,6 +1185,7 @@ function renderRun() {
       <div class="bsub">${info.sub}</div>
       <div class="bigtime" id="bigtime">–:––</div>
       <div class="bprog">Block ${run.i+1} of ${run.seq.length} · ${run.speed > 1 ? `SIMULATION ${run.speed}×` : `finishes ${fmt12(S.finish)}`}</div>
+      <div class="drift" id="drift"></div>
       <div class="overhint hidden" id="overhint">Time's up — tap Next when the groups have swapped</div>
       <div class="nextup">${nx ? `Next: <b>${nx.label}</b>${nx.drill ? ` — ${DRILLS.find(x=>x.key===nx.drill).name}` : ""}` : "Last block — home time after this"}</div>
     </div>
