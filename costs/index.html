@@ -71,6 +71,12 @@
   .hint { padding: 20px 0; text-align: center; font-size: 14px; color: #a8a29e; }
   .math { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--faint); font-size: 13px; color: var(--mut); line-height: 1.5; font-variant-numeric: tabular-nums; }
   .math b { color: #44403c; font-weight: 600; }
+  .reset { width: 100%; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 12px; }
+  input.will-reset { border-color: #f59e0b !important; background: #fffbeb; color: #b45309; transition: background .3s, border-color .3s, color .3s; }
+  .copybtn { width: 100%; margin-top: 12px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .05s; }
+  .copybtn:active { transform: scale(0.98); }
+  .toast { position: fixed; left: 50%; top: 20px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -78,10 +84,12 @@
 <div class="wrap">
   <header>
     <h1><span class="dot"></span>Session Costs<a class="back" id="backlink" href="../" hidden>All apps</a></h1>
-    <p>Enter the booking and who played — see what each person owes.</p>
+    <p>Enter the booking and who played to see what each person owes.</p>
   </header>
 
   <main>
+    <button class="reset" id="resetBtn" onclick="newSession()">New session</button>
+
     <section class="card">
       <h2>Courts</h2>
       <div class="row">
@@ -133,9 +141,12 @@
       <h2>Each person owes</h2>
       <div id="owes"></div>
       <div class="math" id="math"></div>
+      <button class="copybtn" id="copyBtn" onclick="copySummary()" hidden>Copy for group chat</button>
     </section>
   </main>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 const KEY = "badminton-costs-v1";
@@ -196,7 +207,53 @@ function setHours(h) {
 }
 function hoursList() { return S.hours === 3 ? [3, 2, 1] : [2, 1]; }
 
-// Rebuild only when the session length changes — rebuilding while the user
+function calc() {
+  const courtCost = S.courts * S.hours * S.rate;
+  const shuttleCost = S.shuttles * S.sprice;
+  const total = courtCost + shuttleCost;
+  const buckets = hoursList().map(h => ({ h, n: S["p" + h] })).filter(b => b.n > 0);
+  const ph = buckets.reduce((a, b) => a + b.h * b.n, 0);
+  const players = buckets.reduce((a, b) => a + b.n, 0);
+  return { courtCost, shuttleCost, total, buckets, ph, players, ratePH: ph ? total / ph : 0 };
+}
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+// New session: resets counts immediately, flashing the fields that changed.
+let resetFlashTimer = null;
+function newSession() {
+  S.shuttles = 0; S.p1 = 0; S.p2 = 0; S.p3 = 0;
+  persist(); render();
+  setResetHighlights(true);
+  toast("Shuttles and players reset, everything else kept");
+  clearTimeout(resetFlashTimer);
+  resetFlashTimer = setTimeout(() => setResetHighlights(false), 1800);
+}
+function setResetHighlights(on) {
+  for (const id of ["in-shuttles", ...hoursList().map(h => "in-p" + h)]) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("will-reset", on);
+  }
+}
+
+function copySummary() {
+  const { total, buckets, ratePH } = calc();
+  if (!buckets.length) return;
+  const date = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const lines = [`Badminton ${date}: total ${fmt(total)}`];
+  for (const b of buckets) lines.push(`${b.h}h: ${fmt(ceil50(ratePH * b.h))} each (×${b.n})`);
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(lines.join("\n"))
+      .then(() => toast("Copied for the group chat"))
+      .catch(() => toast("Copy failed"));
+  } else toast("Copy not available");
+}
+
+// Rebuild only when the session length changes; rebuilding while the user
 // types in one of the count inputs would steal focus mid-keystroke.
 let builtHours = null;
 function renderPlayerRows() {
@@ -231,12 +288,7 @@ function render(skipInputs) {
     for (const h of hoursList()) document.getElementById("in-p" + h).value = S["p" + h];
   }
 
-  const courtCost = S.courts * S.hours * S.rate;
-  const shuttleCost = S.shuttles * S.sprice;
-  const total = courtCost + shuttleCost;
-  const buckets = hoursList().map(h => ({ h, n: S["p" + h] })).filter(b => b.n > 0);
-  const ph = buckets.reduce((a, b) => a + b.h * b.n, 0);
-  const players = buckets.reduce((a, b) => a + b.n, 0);
+  const { courtCost, shuttleCost, total, buckets, ph, players, ratePH } = calc();
 
   document.getElementById("courtCalc").textContent =
     `${S.courts} court${S.courts > 1 ? "s" : ""} × ${S.hours}h × ${fmt(S.rate)} = ${fmt(courtCost)}`;
@@ -248,13 +300,13 @@ function render(skipInputs) {
 
   const owes = document.getElementById("owes");
   const math = document.getElementById("math");
+  document.getElementById("copyBtn").hidden = !players;
   if (!players) {
     owes.innerHTML = `<p class="hint">Add who played to see shares.</p>`;
     math.textContent = "";
     return;
   }
 
-  const ratePH = total / ph;
   owes.innerHTML = buckets.map(b => {
     const exact = round2(ratePH * b.h);
     const amt = ceil50(ratePH * b.h);
@@ -267,8 +319,8 @@ function render(skipInputs) {
   const collected = buckets.reduce((a, b) => a + ceil50(ratePH * b.h) * b.n, 0);
   const diff = round2(collected - total);
   const note = diff !== 0
-    ? `Rounded up to the nearest 50c — collects <b>${fmt(collected)}</b>, ${fmt(Math.abs(diff))} ${diff > 0 ? "over" : "under"} goes to the organiser.`
-    : `Rounded to the nearest 50c — collects exactly <b>${fmt(collected)}</b>.`;
+    ? `Rounded up to the nearest 50c. Collects <b>${fmt(collected)}</b> (${fmt(diff)} rounding difference).`
+    : `Rounded to the nearest 50c. Collects exactly <b>${fmt(collected)}</b>.`;
   math.innerHTML = `${fmt(courtCost)} courts + ${fmt(shuttleCost)} shuttles = <b>${fmt(total)}</b> ÷ ${ph} player-hours = <b>${fmt(ratePH)}</b>/hour<br>${note}`;
 }
 
