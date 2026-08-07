@@ -18,10 +18,12 @@ const STEP_CENTS = 50;
 const round2 = n => Math.round(n * 100) / 100;
 const formatMoney = n => "$" + n.toFixed(2);
 
-const DEFAULT_STATE = { hours: 3, courts: 2, rate: 0, shuttles: 0, sprice: 0, p1: 0, p2: 0, p3: 0 };
+// Frozen: these are exported, and a caller mutating them would quietly change
+// what every later sanitizeState call produces.
+const DEFAULT_STATE = Object.freeze({ hours: 3, courts: 2, rate: 0, shuttles: 0, sprice: 0, p1: 0, p2: 0, p3: 0 });
 
 // Whole-number fields, and the lowest value each may hold.
-const COUNT_MINIMUMS = { courts: 1, shuttles: 0, p1: 0, p2: 0, p3: 0 };
+const COUNT_MINIMUMS = Object.freeze({ courts: 1, shuttles: 0, p1: 0, p2: 0, p3: 0 });
 
 // The hour buckets a session offers, longest first.
 function hourBuckets(sessionHours) {
@@ -48,12 +50,33 @@ function sanitizeState(raw) {
 }
 
 /*
+ * Switch a session between 2 and 3 hours, returning new state.
+ *
+ * Shortening the session moves the whole-session players down with it: someone
+ * who stayed the entire 3 hours has still stayed the entire 2 hours, so they
+ * belong in the longest bucket rather than being dropped. This decides how
+ * many player-hours exist, and therefore what everybody pays.
+ */
+function switchSessionLength(state, hours) {
+  const next = Object.assign({}, state, { hours });
+  if (hours === 2 && state.hours !== 2) {
+    next.p2 = (state.p2 || 0) + (state.p3 || 0);
+    next.p3 = 0;
+  }
+  return next;
+}
+
+/*
  * Work out what each group of players owes.
  *
  * Courts and shuttles are pooled into one cost and split by player-hours, so
  * someone who stayed twice as long pays twice as much. Buckets come back
  * longest session first, each carrying the rounded share people actually pay
  * and the unrounded share for anyone checking the maths.
+ *
+ * Expects state that has already been through sanitizeState, or that the
+ * caller has otherwise kept to whole counts and non-negative prices. It does
+ * not re-validate, so rubbish in gives rubbish out rather than an error.
  */
 function calcSession(state) {
   const s = state || DEFAULT_STATE;
@@ -71,11 +94,11 @@ function calcSession(state) {
 
   // Ceiling in integer cents. The quotient is rational with denominator
   // playerHours * STEP_CENTS, so Math.ceil is exact here and a share can only
-  // ever round up, never down.
+  // ever round up, never down. Only called for buckets that have players in
+  // them, so playerHours is always at least 1 here.
   const shareFor = hours =>
-    playerHours ? Math.ceil(totalCents * hours / (playerHours * STEP_CENTS)) * STEP_CENTS / 100 : 0;
-  const exactFor = hours =>
-    playerHours ? round2(totalCents * hours / playerHours / 100) : 0;
+    Math.ceil(totalCents * hours / (playerHours * STEP_CENTS)) * STEP_CENTS / 100;
+  const exactFor = hours => round2(totalCents * hours / playerHours / 100);
 
   const buckets = present.map(b => ({
     hours: b.hours,
@@ -124,6 +147,7 @@ return {
   formatMoney,
   hourBuckets,
   sanitizeState,
+  switchSessionLength,
   calcSession,
   summaryLines
 };

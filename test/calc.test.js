@@ -21,6 +21,7 @@ const {
   formatMoney,
   hourBuckets,
   sanitizeState,
+  switchSessionLength,
   calcSession,
   summaryLines,
   DEFAULT_STATE
@@ -114,14 +115,31 @@ theory("sanitizeState field validation", [
 ], c => assert.equal(sanitizeState(c.raw)[c.field], c.expected));
 
 test("sanitizeState ignores unknown keys", () => {
-  const cleaned = sanitizeState({ hours: 3, nonsense: "x", __proto__: { evil: true } });
+  const cleaned = sanitizeState({ hours: 3, nonsense: "x" });
   assert.deepEqual(Object.keys(cleaned).sort(), Object.keys(DEFAULT_STATE).sort());
 });
 
-test("sanitizeState does not mutate the defaults", () => {
+test("sanitizeState shrugs off a prototype pollution attempt", () => {
+  // Written as JSON on purpose. A `__proto__:` key in an object literal sets
+  // the prototype and creates no own property, so the literal form would not
+  // exercise this path at all. Parsed JSON, which is how saved state arrives,
+  // does create a real own key.
+  const hostile = JSON.parse('{"hours":3,"__proto__":{"pwned":true}}');
+  const cleaned = sanitizeState(hostile);
+  assert.deepEqual(Object.keys(cleaned).sort(), Object.keys(DEFAULT_STATE).sort());
+  assert.equal(Object.prototype.hasOwnProperty.call(cleaned, "__proto__"), false);
+  assert.equal({}.pwned, undefined, "Object.prototype must not be polluted");
+});
+
+test("sanitizeState returns a detached object", () => {
   const cleaned = sanitizeState({ courts: 4 });
   cleaned.courts = 99;
   assert.equal(DEFAULT_STATE.courts, 2);
+});
+
+test("the exported defaults cannot be tampered with", () => {
+  assert.throws(() => { "use strict"; DEFAULT_STATE.courts = 99; }, TypeError);
+  assert.equal(sanitizeState({}).courts, 2);
 });
 
 // ---------------------------------------------------------------------------
@@ -193,6 +211,75 @@ test("buckets with nobody in them are dropped", () => {
   assert.deepEqual(r.buckets.map(b => b.hours), [3, 1]);
 });
 
+// ---------------------------------------------------------------------------
+// Switching the session length, which silently changes everyone's bill
+// ---------------------------------------------------------------------------
+
+describe("switchSessionLength", () => {
+  test("shortening to 2h keeps the whole-session players in the longest bucket", () => {
+    const after = switchSessionLength(session({ hours: 3, p3: 9, p2: 3, p1: 1 }), 2);
+    assert.equal(after.hours, 2);
+    assert.equal(after.p2, 12, "the 9 who stayed all session join the 3 already there");
+    assert.equal(after.p3, 0);
+    assert.equal(after.p1, 1, "the short stayers are untouched");
+  });
+
+  test("lengthening to 3h leaves the counts alone", () => {
+    const after = switchSessionLength(session({ hours: 2, p2: 6, p1: 2 }), 3);
+    assert.equal(after.hours, 3);
+    assert.equal(after.p2, 6);
+    assert.equal(after.p1, 2);
+    assert.equal(after.p3, 0);
+  });
+
+  test("switching to the length it already is changes nothing", () => {
+    const before = session({ hours: 2, p2: 6, p1: 2 });
+    assert.deepEqual(switchSessionLength(before, 2), before);
+  });
+
+  test("does not mutate the state it was given", () => {
+    const before = session({ hours: 3, p3: 9, p2: 3 });
+    switchSessionLength(before, 2);
+    assert.equal(before.hours, 3);
+    assert.equal(before.p3, 9);
+    assert.equal(before.p2, 3);
+  });
+
+  test("nobody is dropped from the bill when the session shortens", () => {
+    const before = session({ hours: 3, p3: 9, p2: 3 });
+    const after = switchSessionLength(before, 2);
+    assert.equal(calcSession(before).playerCount, calcSession(after).playerCount, 12);
+  });
+
+  test("the usual night reprices correctly when shortened to 2 hours", () => {
+    const before = calcSession(session({ hours: 3, courts: 2, rate: 21, shuttles: 8, sprice: 5, p3: 9, p2: 3 }));
+    const after = calcSession(switchSessionLength(
+      session({ hours: 3, courts: 2, rate: 21, shuttles: 8, sprice: 5, p3: 9, p2: 3 }), 2));
+
+    assert.equal(before.playerHours, 33);
+    assert.equal(after.playerHours, 24, "12 players who all stayed the full 2 hours");
+    assert.equal(before.buckets[0].share, 15.5);
+    assert.equal(after.buckets[0].share, 10.5, "a shorter, cheaper session costs less each");
+    assert.ok(after.collected >= after.total);
+  });
+
+  test("losing the merge would overcharge the few players left", () => {
+    // If the whole-session players were dropped rather than moved down, only
+    // the 3 who played two hours would remain, and they would carry the lot.
+    const night = { courts: 2, rate: 21, shuttles: 8, sprice: 5 };
+    const dropped = calcSession(session(Object.assign({ hours: 2, p2: 3 }, night)));
+    const merged = calcSession(switchSessionLength(
+      session(Object.assign({ hours: 3, p3: 9, p2: 3 }, night)), 2));
+
+    assert.equal(dropped.playerHours, 6, "only the 3 short stayers remain");
+    assert.equal(merged.playerHours, 24, "all 12 stayed the full two hours");
+    assert.equal(dropped.buckets[0].share, 41.5);
+    assert.equal(merged.buckets[0].share, 10.5);
+    assert.ok(dropped.buckets[0].share > merged.buckets[0].share * 3,
+      "dropping the merge would bill the remaining players several times over");
+  });
+});
+
 test("a two hour session has no three hour bucket", () => {
   const r = calcSession(session({ hours: 2, p3: 5, p2: 6, p1: 2 }));
   assert.deepEqual(r.buckets.map(b => b.hours), [2, 1]);
@@ -248,10 +335,11 @@ theory("shares round up to the next 50c", [
 });
 
 describe("rounding invariants", () => {
-  // Enough combinations to cover every remainder against a range of squad
-  // sizes, without turning the suite into a long-running job.
+  // Step 13 because it shares no factor with the 50c step or with any squad
+  // size below, so every combination of remainders gets visited. A step of 7
+  // would leave the 7 player squad seeing only one remainder in seven.
   const costsInCents = [];
-  for (let cents = 1; cents <= 30000; cents += 7) costsInCents.push(cents);
+  for (let cents = 1; cents <= 30000; cents += 13) costsInCents.push(cents);
   const squads = [1, 2, 3, 5, 7, 8, 10, 12, 17, 24, 29, 33];
 
   test("a share is never less than the exact amount owed", () => {
@@ -272,6 +360,17 @@ describe("rounding invariants", () => {
         const trueShare = r.totalCents / ph / 100;
         const share = r.buckets[0].share;
         assert.ok(share - trueShare < 0.5, `${cents}c over ${ph} overshot: ${share} vs ${trueShare}`);
+      }
+    }
+  });
+
+  test("the exact amount is never more than the amount charged", () => {
+    // Otherwise the screen would read "pay $17.00, exact $17.50", which looks
+    // like the app is short-changing the pot.
+    for (const cents of costsInCents) {
+      for (const ph of squads) {
+        const b = calcSession(costingExactly(cents / 100, { p1: ph })).buckets[0];
+        assert.ok(b.exact <= b.share, `${cents}c over ${ph}: exact ${b.exact} > share ${b.share}`);
       }
     }
   });

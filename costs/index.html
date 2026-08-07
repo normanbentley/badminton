@@ -157,7 +157,8 @@
 <script src="calc.js"></script>
 <script>
 // All money maths lives in calc.js so it can be tested outside a browser.
-const { round2, formatMoney: fmt, hourBuckets, sanitizeState, calcSession, summaryLines, COUNT_MINIMUMS: MIN } = ShuttleSplit;
+const { round2, formatMoney: fmt, hourBuckets, sanitizeState, switchSessionLength,
+        calcSession, summaryLines, COUNT_MINIMUMS: MIN } = ShuttleSplit;
 
 const KEY = "badminton-costs-v1";
 let S = load();
@@ -190,9 +191,7 @@ function setCount(key, raw) {
 }
 function setHours(h) {
   if (h === S.hours) return;
-  // Going 3h -> 2h: "played the whole session" players stay whole-session.
-  if (h === 2) { S.p2 = S.p2 + S.p3; S.p3 = 0; }
-  S.hours = h;
+  S = switchSessionLength(S, h);
   persist(); render();
 }
 function hoursList() { return hourBuckets(S.hours); }

@@ -14,5 +14,9 @@ jobs:
         with:
           node-version: 22
       # No dependencies to install: the suite uses Node's built-in test runner.
-      # ubuntu-latest ships Chrome, which the page smoke test uses.
+      # ubuntu-latest ships Chrome, which the page tests need. REQUIRE_BROWSER
+      # makes that load-bearing: if the browser ever goes missing the run fails
+      # rather than quietly skipping every page test and staying green.
       - run: node --test
+        env:
+          REQUIRE_BROWSER: "1"

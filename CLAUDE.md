@@ -22,16 +22,35 @@ tests run.
 
 The suite needs nothing installed: Node's built-in test runner, no packages.
 
+This is enforced by a `pre-push` hook in `.githooks/`, which runs the suite and
+refuses the push if anything fails. Hooks are per clone, so on a fresh clone
+enable it once with:
+
+```
+git config core.hooksPath .githooks
+```
+
+`git push --no-verify` skips it, which is fine for a README typo and not fine
+for anything under `costs/`.
+
+Pages publishes straight from `main`, so a push goes live immediately. There is
+no deploy gate on purpose: branch-based publishing has no moving parts, and the
+failure worth fearing here is not a broken page (obvious in seconds) but subtly
+wrong numbers (silent, and what the tests are for).
+
 ## Where the tests live
 
 - `test/calc.test.js` the money maths, table-driven in the style of xUnit's
   `[Theory]` so each combination of inputs is its own named case
-- `test/page.smoke.test.js` loads `costs/index.html` in headless Chrome and
-  checks the page actually rendered. It skips itself if no browser is found.
+- `test/page.smoke.test.js` renders `costs/index.html` in headless Chrome, seeds
+  a known club night, and asserts the amounts actually on screen. It skips when
+  no browser is found, unless `REQUIRE_BROWSER=1`, which CI sets.
 
-Unit tests alone are not enough here. Extracting the maths into `costs/calc.js`
-once broke the page completely while all the unit tests still passed, which is
-why the smoke test exists. Keep both green.
+Unit tests alone are not enough here, and two real failures prove it. Extracting
+the maths into `costs/calc.js` once broke the page completely while every unit
+test passed. Separately, rendering `exact` instead of `share` undercharges
+everybody and no unit test can see it. Anything that changes what the page
+displays needs a page test, not just a module test.
 
 ## Rules for the cost app
 
