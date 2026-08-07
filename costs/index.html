@@ -71,7 +71,10 @@
   .hint { padding: 20px 0; text-align: center; font-size: 14px; color: #a8a29e; }
   .math { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--faint); font-size: 13px; color: var(--mut); line-height: 1.5; font-variant-numeric: tabular-nums; }
   .math b { color: #44403c; font-weight: 600; }
-  .reset { width: 100%; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 12px; }
+  .math .nw { white-space: nowrap; }
+  .rhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .rhead .tot { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .hbtn { margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--mut); font-size: 13px; font-weight: 600; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
   input.will-reset { border-color: #f59e0b !important; background: #fffbeb; color: #b45309; transition: background .3s, border-color .3s, color .3s; }
   .copybtn { width: 100%; margin-top: 12px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .05s; }
   .copybtn:active { transform: scale(0.98); }
@@ -83,12 +86,10 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><svg class="shu" viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><path d="M26 40 L15 12 Q32 4 49 12 L38 40 Q32 43 26 40 Z" fill="var(--accent)"/><path d="M29 39 L24 9 M35 39 L40 9" stroke="var(--bg)" stroke-width="3" fill="none"/><rect x="24" y="44" width="16" height="11" rx="5.5" fill="var(--accent)"/></svg>Who Pays What<a class="back" id="backlink" href="../" hidden>All apps</a></h1>
+    <h1><svg class="shu" viewBox="0 0 64 64" width="24" height="24" aria-hidden="true"><path d="M26 40 L15 12 Q32 4 49 12 L38 40 Q32 43 26 40 Z" fill="var(--accent)"/><path d="M29 39 L24 9 M35 39 L40 9" stroke="var(--bg)" stroke-width="3" fill="none"/><rect x="24" y="44" width="16" height="11" rx="5.5" fill="var(--accent)"/></svg>Who Pays What<button class="hbtn" onclick="newSession()">New session</button><a class="back" id="backlink" href="../" hidden>All apps</a></h1>
   </header>
 
   <main>
-    <button class="reset" id="resetBtn" onclick="newSession()">New session</button>
-
     <section class="card">
       <h2>Courts</h2>
       <div class="row">
@@ -102,7 +103,7 @@
         <span class="lbl">Courts</span>
         <div class="stepper">
           <button onclick="bump('courts',-1)" id="courts-minus">−</button>
-          <span class="v" id="v-courts">2</span>
+          <input class="v" id="in-courts" type="number" inputmode="numeric" min="1" onfocus="selectAll(this)" oninput="setCount('courts', this.value)" onblur="render()">
           <button onclick="bump('courts',1)" id="courts-plus">+</button>
         </div>
       </div>
@@ -137,7 +138,10 @@
     </section>
 
     <section class="card">
-      <h2>Each person owes</h2>
+      <div class="rhead">
+        <h2>Each person owes</h2>
+        <span class="tot" id="tot"></span>
+      </div>
       <div id="owes"></div>
       <div class="math" id="math"></div>
       <button class="copybtn" id="copyBtn" onclick="copySummary()" hidden>Copy for group chat</button>
@@ -280,7 +284,6 @@ function render(skipInputs) {
   document.getElementById("h3").classList.toggle("on", S.hours === 3);
 
   renderPlayerRows();
-  document.getElementById("v-courts").textContent = S.courts;
   for (const k of Object.keys(RANGES)) {
     const minus = document.getElementById(k + "-minus"), plus = document.getElementById(k + "-plus");
     if (minus) minus.disabled = S[k] <= RANGES[k][0];
@@ -289,6 +292,7 @@ function render(skipInputs) {
   if (!skipInputs) {
     document.getElementById("in-rate").value = S.rate || "";
     document.getElementById("in-sprice").value = S.sprice || "";
+    document.getElementById("in-courts").value = S.courts;
     document.getElementById("in-shuttles").value = S.shuttles;
     for (const h of hoursList()) document.getElementById("in-p" + h).value = S["p" + h];
   }
@@ -302,6 +306,7 @@ function render(skipInputs) {
   document.getElementById("playerCalc").textContent = players
     ? `${players} player${players > 1 ? "s" : ""} · ${ph} player-hours`
     : "No players yet";
+  document.getElementById("tot").textContent = total > 0 ? "Total " + fmt(total) : "";
 
   const owes = document.getElementById("owes");
   const math = document.getElementById("math");
@@ -326,7 +331,7 @@ function render(skipInputs) {
   const note = diff !== 0
     ? `Rounded up to the nearest 50c. Collects <b>${fmt(collected)}</b> (${fmt(diff)} rounding difference).`
     : `Rounded to the nearest 50c. Collects exactly <b>${fmt(collected)}</b>.`;
-  math.innerHTML = `${fmt(courtCost)} courts + ${fmt(shuttleCost)} shuttles = <b>${fmt(total)}</b> ÷ ${ph} player-hours = <b>${fmt(ratePH)}</b>/hour<br>${note}`;
+  math.innerHTML = `${fmt(courtCost)} courts + ${fmt(shuttleCost)} shuttles = <b>${fmt(total)}</b> ÷ ${ph} player-hours = <span class="nw"><b>${fmt(ratePH)}</b>/hour</span><br>${note}`;
 }
 
 // Show the hub back link only on browsers that have visited the landing page.
