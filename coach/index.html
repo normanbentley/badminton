@@ -31,7 +31,6 @@
   header { padding: 20px 16px 8px; }
   h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 8px; }
   h1 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
-  .back { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--mut); text-decoration: none; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; }
   header p { margin: 4px 0 0; font-size: 14px; color: var(--mut); }
   .tabs { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 6px 16px 8px; }
   .tabrow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; background: #e7e5e4; border-radius: 12px; padding: 4px; }
@@ -174,7 +173,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><span class="dot"></span>Session Coach<a class="back hidden" id="backlink" href="../">All apps</a></h1>
+    <h1><span class="dot"></span>Session Coach</h1>
     <p>Set tonight's numbers, pick drills, then run the rotation timer courtside.</p>
   </header>
 
@@ -1254,9 +1253,6 @@ function restoreRun() {
     enterBlock(run.i + 1);
   }
 }
-
-// Show the hub back link only on browsers that have visited the landing page.
-try { if (localStorage.getItem("badminton-hub-v1")) document.getElementById("backlink").classList.remove("hidden"); } catch {}
 
 restoreRun();
 if (run) { requestWake(); setTab("run"); } else { renderPlan(); renderBar(); }
