@@ -187,8 +187,6 @@ function persist() {
 function selectAll(el) { setTimeout(() => el.select(), 0); }
 
 const fmt = n => "$" + n.toFixed(2);
-// Round to cents first so float noise (e.g. 16.500000001) can't push the ceiling up a step.
-const ceil50 = n => Math.ceil(Math.round(n * 100) / 50) * 50 / 100;
 const round2 = n => Math.round(n * 100) / 100;
 
 function bump(key, d) {
@@ -198,7 +196,7 @@ function bump(key, d) {
 }
 function setNum(key, raw) {
   const v = parseFloat(raw);
-  S[key] = isFinite(v) && v >= 0 ? v : 0;
+  S[key] = isFinite(v) && v >= 0 ? round2(v) : 0;
   persist(); render(true);
 }
 function setCount(key, raw) {
@@ -217,13 +215,18 @@ function setHours(h) {
 function hoursList() { return S.hours === 3 ? [3, 2, 1] : [2, 1]; }
 
 function calc() {
-  const courtCost = S.courts * S.hours * S.rate;
-  const shuttleCost = S.shuttles * S.sprice;
-  const total = courtCost + shuttleCost;
+  const courtCost = round2(S.courts * S.hours * S.rate);
+  const shuttleCost = round2(S.shuttles * S.sprice);
+  const totalCents = Math.round(courtCost * 100) + Math.round(shuttleCost * 100);
+  const total = totalCents / 100;
   const buckets = hoursList().map(h => ({ h, n: S["p" + h] })).filter(b => b.n > 0);
   const ph = buckets.reduce((a, b) => a + b.h * b.n, 0);
   const players = buckets.reduce((a, b) => a + b.n, 0);
-  return { courtCost, shuttleCost, total, buckets, ph, players, ratePH: ph ? total / ph : 0 };
+  // Share ceiling in integer cents: the quotient is rational with denominator
+  // ph*50, so Math.ceil is exact and rounding is always up, never down.
+  const shareFor = h => ph ? Math.ceil(totalCents * h / (ph * 50)) * 50 / 100 : 0;
+  const exactFor = h => ph ? round2(totalCents * h / ph / 100) : 0;
+  return { courtCost, shuttleCost, total, buckets, ph, players, ratePH: ph ? total / ph : 0, shareFor, exactFor };
 }
 
 function toast(msg) {
@@ -250,11 +253,11 @@ function setResetHighlights(on) {
 }
 
 function copySummary() {
-  const { total, buckets, ratePH } = calc();
+  const { total, buckets, shareFor } = calc();
   if (!buckets.length) return;
   const date = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
   const lines = [`Badminton ${date}: total ${fmt(total)}`];
-  for (const b of buckets) lines.push(`${b.h}h: ${fmt(ceil50(ratePH * b.h))} each (×${b.n})`);
+  for (const b of buckets) lines.push(`${b.h}h: ${fmt(shareFor(b.h))} each (×${b.n})`);
   if (navigator.clipboard) {
     navigator.clipboard.writeText(lines.join("\n"))
       .then(() => toast("Copied for the group chat"))
@@ -297,7 +300,7 @@ function render(skipInputs) {
     for (const h of hoursList()) document.getElementById("in-p" + h).value = S["p" + h];
   }
 
-  const { courtCost, shuttleCost, total, buckets, ph, players, ratePH } = calc();
+  const { courtCost, shuttleCost, total, buckets, ph, players, ratePH, shareFor, exactFor } = calc();
 
   document.getElementById("courtCalc").textContent =
     `${S.courts} court${S.courts > 1 ? "s" : ""} × ${S.hours}h × ${fmt(S.rate)} = ${fmt(courtCost)}`;
@@ -318,20 +321,20 @@ function render(skipInputs) {
   }
 
   owes.innerHTML = buckets.map(b => {
-    const exact = round2(ratePH * b.h);
-    const amt = ceil50(ratePH * b.h);
+    const exact = exactFor(b.h);
+    const amt = shareFor(b.h);
     return `<div class="owe">
       <div class="who">${b.h} hour${b.h > 1 ? "s" : ""}<small>× ${b.n} player${b.n > 1 ? "s" : ""}</small></div>
       <div class="amt">${fmt(amt)} <small>each</small>${amt !== exact ? `<span class="ex">exact ${fmt(exact)}</span>` : ""}</div>
     </div>`;
   }).join("");
 
-  const collected = buckets.reduce((a, b) => a + ceil50(ratePH * b.h) * b.n, 0);
+  const collected = buckets.reduce((a, b) => a + shareFor(b.h) * b.n, 0);
   const diff = round2(collected - total);
   const note = diff !== 0
     ? `Rounded up to the nearest 50c. Collects <b>${fmt(collected)}</b> (${fmt(diff)} rounding difference).`
     : `Rounded to the nearest 50c. Collects exactly <b>${fmt(collected)}</b>.`;
-  math.innerHTML = `${fmt(courtCost)} courts + ${fmt(shuttleCost)} shuttles = <b>${fmt(total)}</b> ÷ ${ph} player-hours = <span class="nw"><b>${fmt(ratePH)}</b>/hour</span><br>${note}`;
+  math.innerHTML = `${fmt(courtCost)} courts + ${fmt(shuttleCost)} shuttles = <b>${fmt(total)}</b> ÷ ${ph} player-hours ≈ <span class="nw"><b>${fmt(ratePH)}</b>/hour</span><br>${note}`;
 }
 
 // Show the hub back link only on browsers that have visited the landing page.
