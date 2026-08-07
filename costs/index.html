@@ -254,10 +254,10 @@ function setResetHighlights(on) {
 }
 
 function copySummary() {
-  const { total, buckets, shareFor } = calc();
+  const { buckets, shareFor } = calc();
   if (!buckets.length) return;
   const date = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  const lines = [`Badminton ${date}: total ${fmt(total)}`];
+  const lines = [`Badminton ${date}`];
   for (const b of buckets) lines.push(`${b.h}h: ${fmt(shareFor(b.h))} each (×${b.n})`);
   if (navigator.clipboard) {
     navigator.clipboard.writeText(lines.join("\n"))
