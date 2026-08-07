@@ -7,9 +7,9 @@
 <meta name="robots" content="noindex">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Costs">
+<meta name="apple-mobile-web-app-title" content="Who Pays">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23166534'/%3E%3Ctext x='32' y='45' font-family='ui-sans-serif,system-ui,sans-serif' font-size='38' font-weight='700' fill='white' text-anchor='middle'%3E%24%3C/text%3E%3C/svg%3E">
-<title>Session Costs</title>
+<title>Who Pays What</title>
 <style>
   :root {
     --accent: #166534;
@@ -30,9 +30,9 @@
   .wrap { max-width: 480px; margin: 0 auto; }
   header { padding: 20px 16px 12px; }
   h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 8px; }
-  h1 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  h1 .shu { flex: 0 0 auto; }
   .back { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--mut); text-decoration: none; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; }
-  header p { margin: 4px 0 0; font-size: 14px; color: var(--mut); }
+  footer { padding: 20px 16px 8px; text-align: center; font-size: 12px; color: #a8a29e; }
   main { padding: 0 16px; }
   .card { border: 1px solid var(--line); background: var(--card); border-radius: 16px; margin-bottom: 12px; padding: 12px 16px 14px; }
   .card h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
@@ -83,8 +83,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><span class="dot"></span>Session Costs<a class="back" id="backlink" href="../" hidden>All apps</a></h1>
-    <p>Enter the booking and who played to see what each person owes.</p>
+    <h1><svg class="shu" viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><path d="M26 40 L15 12 Q32 4 49 12 L38 40 Q32 43 26 40 Z" fill="var(--accent)"/><path d="M29 39 L24 9 M35 39 L40 9" stroke="var(--bg)" stroke-width="3" fill="none"/><rect x="24" y="44" width="16" height="11" rx="5.5" fill="var(--accent)"/></svg>Who Pays What<a class="back" id="backlink" href="../" hidden>All apps</a></h1>
   </header>
 
   <main>
@@ -109,7 +108,7 @@
       </div>
       <div class="row">
         <span class="lbl">Rate per court, per hour</span>
-        <input class="money" id="in-rate" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0.00" oninput="setNum('rate', this.value)">
+        <input class="money" id="in-rate" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0.00" onfocus="selectAll(this)" oninput="setNum('rate', this.value)">
       </div>
       <p class="calc" id="courtCalc"></p>
     </section>
@@ -120,13 +119,13 @@
         <span class="lbl">Shuttles used</span>
         <div class="stepper">
           <button onclick="bump('shuttles',-1)" id="shuttles-minus">−</button>
-          <input class="v" id="in-shuttles" type="number" inputmode="numeric" min="0" oninput="setCount('shuttles', this.value)" onblur="render()">
+          <input class="v" id="in-shuttles" type="number" inputmode="numeric" min="0" onfocus="selectAll(this)" oninput="setCount('shuttles', this.value)" onblur="render()">
           <button onclick="bump('shuttles',1)" id="shuttles-plus">+</button>
         </div>
       </div>
       <div class="row">
         <span class="lbl">Price each</span>
-        <input class="money" id="in-sprice" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0.00" oninput="setNum('sprice', this.value)">
+        <input class="money" id="in-sprice" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0.00" onfocus="selectAll(this)" oninput="setNum('sprice', this.value)">
       </div>
       <p class="calc" id="shuttleCalc"></p>
     </section>
@@ -144,6 +143,8 @@
       <button class="copybtn" id="copyBtn" onclick="copySummary()" hidden>Copy for group chat</button>
     </section>
   </main>
+
+  <footer>Everything is saved on this phone only. Nothing is sent anywhere.</footer>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -176,6 +177,10 @@ function load() {
 function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {}
 }
+
+// Select the whole value on focus so typing replaces it (no deleting the 0
+// first). Deferred because iOS Safari drops select() called during focus.
+function selectAll(el) { setTimeout(() => el.select(), 0); }
 
 const fmt = n => "$" + n.toFixed(2);
 // Round to cents first so float noise (e.g. 16.500000001) can't push the ceiling up a step.
@@ -264,7 +269,7 @@ function renderPlayerRows() {
       <span class="lbl">Played ${h} hour${h > 1 ? "s" : ""}</span>
       <div class="stepper">
         <button onclick="bump('p${h}',-1)" id="p${h}-minus">−</button>
-        <input class="v" id="in-p${h}" type="number" inputmode="numeric" min="0" value="${S["p"+h]}" oninput="setCount('p${h}', this.value)" onblur="render()">
+        <input class="v" id="in-p${h}" type="number" inputmode="numeric" min="0" value="${S["p"+h]}" onfocus="selectAll(this)" oninput="setCount('p${h}', this.value)" onblur="render()">
         <button onclick="bump('p${h}',1)" id="p${h}-plus">+</button>
       </div>
     </div>`).join("");
