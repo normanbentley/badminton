@@ -154,30 +154,17 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="calc.js"></script>
 <script>
+// All money maths lives in calc.js so it can be tested outside a browser.
+const { round2, formatMoney: fmt, hourBuckets, sanitizeState, calcSession, summaryLines, COUNT_MINIMUMS: MIN } = ShuttleSplit;
+
 const KEY = "badminton-costs-v1";
-const RANGES = { courts:[1, Infinity], shuttles:[0, Infinity], p1:[0, Infinity], p2:[0, Infinity], p3:[0, Infinity] };
-const DEF = { hours:3, courts:2, rate:0, shuttles:0, sprice:0, p1:0, p2:0, p3:0 };
 let S = load();
 
-function intIn(v, [min, max], def) {
-  return Number.isInteger(v) && v >= min && v <= max ? v : def;
-}
-function numIn(v) {
-  return typeof v === "number" && isFinite(v) && v >= 0 ? v : 0;
-}
 function load() {
-  const s = { ...DEF };
-  try {
-    const d = JSON.parse(localStorage.getItem(KEY));
-    if (d && typeof d === "object") {
-      if (d.hours === 2 || d.hours === 3) s.hours = d.hours;
-      for (const k of Object.keys(RANGES)) s[k] = intIn(d[k], RANGES[k], DEF[k]);
-      s.rate = numIn(d.rate);
-      s.sprice = numIn(d.sprice);
-    }
-  } catch {}
-  return s;
+  try { return sanitizeState(JSON.parse(localStorage.getItem(KEY))); }
+  catch { return sanitizeState(null); }
 }
 function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {}
@@ -187,12 +174,8 @@ function persist() {
 // first). Deferred because iOS Safari drops select() called during focus.
 function selectAll(el) { setTimeout(() => el.select(), 0); }
 
-const fmt = n => "$" + n.toFixed(2);
-const round2 = n => Math.round(n * 100) / 100;
-
 function bump(key, d) {
-  const [min, max] = RANGES[key];
-  S[key] = Math.min(max, Math.max(min, S[key] + d));
+  S[key] = Math.max(MIN[key], S[key] + d);
   persist(); render();
 }
 function setNum(key, raw) {
@@ -202,33 +185,17 @@ function setNum(key, raw) {
 }
 function setCount(key, raw) {
   const v = parseInt(raw, 10);
-  const [min, max] = RANGES[key];
-  S[key] = isFinite(v) ? Math.min(max, Math.max(min, v)) : min;
+  S[key] = isFinite(v) ? Math.max(MIN[key], v) : MIN[key];
   persist(); render(true);
 }
 function setHours(h) {
   if (h === S.hours) return;
   // Going 3h -> 2h: "played the whole session" players stay whole-session.
-  if (h === 2) { S.p2 = Math.min(RANGES.p2[1], S.p2 + S.p3); S.p3 = 0; }
+  if (h === 2) { S.p2 = S.p2 + S.p3; S.p3 = 0; }
   S.hours = h;
   persist(); render();
 }
-function hoursList() { return S.hours === 3 ? [3, 2, 1] : [2, 1]; }
-
-function calc() {
-  const courtCost = round2(S.courts * S.hours * S.rate);
-  const shuttleCost = round2(S.shuttles * S.sprice);
-  const totalCents = Math.round(courtCost * 100) + Math.round(shuttleCost * 100);
-  const total = totalCents / 100;
-  const buckets = hoursList().map(h => ({ h, n: S["p" + h] })).filter(b => b.n > 0);
-  const ph = buckets.reduce((a, b) => a + b.h * b.n, 0);
-  const players = buckets.reduce((a, b) => a + b.n, 0);
-  // Share ceiling in integer cents: the quotient is rational with denominator
-  // ph*50, so Math.ceil is exact and rounding is always up, never down.
-  const shareFor = h => ph ? Math.ceil(totalCents * h / (ph * 50)) * 50 / 100 : 0;
-  const exactFor = h => ph ? round2(totalCents * h / ph / 100) : 0;
-  return { courtCost, shuttleCost, total, buckets, ph, players, ratePH: ph ? total / ph : 0, shareFor, exactFor };
-}
+function hoursList() { return hourBuckets(S.hours); }
 
 function toast(msg) {
   const t = document.getElementById("toast");
@@ -254,11 +221,9 @@ function setResetHighlights(on) {
 }
 
 function copySummary() {
-  const { buckets, shareFor } = calc();
-  if (!buckets.length) return;
   const date = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  const lines = [`Badminton ${date}`];
-  for (const b of buckets) lines.push(`${b.h}h: ${fmt(shareFor(b.h))} each (×${b.n})`);
+  const lines = summaryLines(calcSession(S), date);
+  if (!lines.length) return;
   if (navigator.clipboard) {
     navigator.clipboard.writeText(lines.join("\n"))
       .then(() => toast("Copied for the group chat"))
@@ -288,10 +253,9 @@ function render(skipInputs) {
   document.getElementById("h3").classList.toggle("on", S.hours === 3);
 
   renderPlayerRows();
-  for (const k of Object.keys(RANGES)) {
-    const minus = document.getElementById(k + "-minus"), plus = document.getElementById(k + "-plus");
-    if (minus) minus.disabled = S[k] <= RANGES[k][0];
-    if (plus) plus.disabled = S[k] >= RANGES[k][1];
+  for (const k of Object.keys(MIN)) {
+    const minus = document.getElementById(k + "-minus");
+    if (minus) minus.disabled = S[k] <= MIN[k];
   }
   if (!skipInputs) {
     document.getElementById("in-rate").value = S.rate || "";
@@ -301,41 +265,36 @@ function render(skipInputs) {
     for (const h of hoursList()) document.getElementById("in-p" + h).value = S["p" + h];
   }
 
-  const { courtCost, shuttleCost, total, buckets, ph, players, ratePH, shareFor, exactFor } = calc();
+  const r = calcSession(S);
 
   document.getElementById("courtCalc").textContent =
-    `${S.courts} court${S.courts > 1 ? "s" : ""} × ${S.hours}h × ${fmt(S.rate)} = ${fmt(courtCost)}`;
+    `${S.courts} court${S.courts > 1 ? "s" : ""} × ${S.hours}h × ${fmt(S.rate)} = ${fmt(r.courtCost)}`;
   document.getElementById("shuttleCalc").textContent =
-    `${S.shuttles} × ${fmt(S.sprice)} = ${fmt(shuttleCost)}`;
-  document.getElementById("playerCalc").textContent = players
-    ? `${players} player${players > 1 ? "s" : ""} · ${ph} player-hours`
+    `${S.shuttles} × ${fmt(S.sprice)} = ${fmt(r.shuttleCost)}`;
+  document.getElementById("playerCalc").textContent = r.playerCount
+    ? `${r.playerCount} player${r.playerCount > 1 ? "s" : ""} · ${r.playerHours} player-hours`
     : "No players yet";
-  document.getElementById("tot").textContent = total > 0 ? "Total " + fmt(total) : "";
+  document.getElementById("tot").textContent = r.total > 0 ? "Total " + fmt(r.total) : "";
 
   const owes = document.getElementById("owes");
   const math = document.getElementById("math");
-  document.getElementById("copyBtn").hidden = !players;
-  if (!players) {
+  document.getElementById("copyBtn").hidden = !r.playerCount;
+  if (!r.playerCount) {
     owes.innerHTML = `<p class="hint">Add who played to see shares.</p>`;
     math.textContent = "";
     return;
   }
 
-  owes.innerHTML = buckets.map(b => {
-    const exact = exactFor(b.h);
-    const amt = shareFor(b.h);
-    return `<div class="owe">
-      <div class="who">${b.h} hour${b.h > 1 ? "s" : ""}<small>× ${b.n} player${b.n > 1 ? "s" : ""}</small></div>
-      <div class="amt">${fmt(amt)} <small>each</small>${amt !== exact ? `<span class="ex">exact ${fmt(exact)}</span>` : ""}</div>
-    </div>`;
-  }).join("");
+  owes.innerHTML = r.buckets.map(b => `
+    <div class="owe">
+      <div class="who">${b.hours} hour${b.hours > 1 ? "s" : ""}<small>× ${b.count} player${b.count > 1 ? "s" : ""}</small></div>
+      <div class="amt">${fmt(b.share)} <small>each</small>${b.share !== b.exact ? `<span class="ex">exact ${fmt(b.exact)}</span>` : ""}</div>
+    </div>`).join("");
 
-  const collected = buckets.reduce((a, b) => a + shareFor(b.h) * b.n, 0);
-  const diff = round2(collected - total);
-  const note = diff !== 0
-    ? `Rounded up to the nearest 50c. Collects <b>${fmt(collected)}</b> (${fmt(diff)} rounding difference).`
-    : `Rounded to the nearest 50c. Collects exactly <b>${fmt(collected)}</b>.`;
-  math.innerHTML = `${fmt(courtCost)} courts + ${fmt(shuttleCost)} shuttles = <b>${fmt(total)}</b> ÷ ${ph} player-hours ≈ <span class="nw"><b>${fmt(ratePH)}</b>/hour</span><br>${note}`;
+  const note = r.roundingDifference !== 0
+    ? `Rounded up to the nearest 50c. Collects <b>${fmt(r.collected)}</b> (${fmt(r.roundingDifference)} rounding difference).`
+    : `Rounded to the nearest 50c. Collects exactly <b>${fmt(r.collected)}</b>.`;
+  math.innerHTML = `${fmt(r.courtCost)} courts + ${fmt(r.shuttleCost)} shuttles = <b>${fmt(r.total)}</b> ÷ ${r.playerHours} player-hours ≈ <span class="nw"><b>${fmt(r.ratePerHour)}</b>/hour</span><br>${note}`;
 }
 
 render();

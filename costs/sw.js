@@ -1,4 +1,4 @@
-const CACHE = "shuttle-split-v1";
+const CACHE = "shuttle-split-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 
