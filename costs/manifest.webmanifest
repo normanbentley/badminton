@@ -1,6 +1,6 @@
 {
-  "name": "Who Pays What",
-  "short_name": "Who Pays",
+  "name": "Shuttle Split",
+  "short_name": "Split",
   "description": "Split badminton court and shuttle costs by hours played.",
   "start_url": ".",
   "scope": ".",

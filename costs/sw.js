@@ -1,4 +1,4 @@
-const CACHE = "who-pays-what-v1";
+const CACHE = "shuttle-split-v1";
 
 self.addEventListener("install", () => self.skipWaiting());
 
