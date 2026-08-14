@@ -56,6 +56,8 @@
   .hrow:last-child { border-bottom: 0; }
   .hmain { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
   .hmain b { color: #44403c; font-weight: 600; }
+  .hbtns { display: flex; align-items: center; flex: 0 0 auto; }
+  .edit { border: 0; background: transparent; color: #a8a29e; font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 6px; }
   .del { border: 0; background: transparent; color: #a8a29e; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; }
   .hsub { margin-top: 2px; }
   .hnote { margin-top: 2px; font-style: italic; }
@@ -181,25 +183,39 @@ function setField(id, v) {
 
 let logCtx = null;
 
-function openLog(racketId, type) {
-  const racket = S.rackets.find(r => r.id === racketId);
-  if (!racket) return;
-  logCtx = { racketId, type };
-  document.getElementById("logTitle").textContent =
-    (type === "strings" ? "Restring " : "Regrip ") + racket.name;
+function showLog(title, type, v) {
+  document.getElementById("logTitle").textContent = title;
   for (const el of document.querySelectorAll("#logCard .frow[data-for]")) {
     el.hidden = el.dataset.for !== type;
   }
-  const p = prefill(S, racketId, type);
-  const today = isoDaysAgo(0);
-  document.getElementById("f-date").setAttribute("max", today);
-  setField("f-date", today);
-  for (const t of TYPES) for (const f of DETAIL_FIELDS[t]) setField("f-" + f, t === type ? p[f] : "");
-  setField("f-cost", p.cost);
-  setField("f-note", "");
+  document.getElementById("f-date").setAttribute("max", isoDaysAgo(0));
+  setField("f-date", v.date);
+  for (const t of TYPES) for (const f of DETAIL_FIELDS[t]) setField("f-" + f, t === type ? v[f] || "" : "");
+  setField("f-cost", v.cost);
+  setField("f-note", v.note || "");
   const card = document.getElementById("logCard");
   card.hidden = false;
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// A fresh entry: today's date, details prefilled from the previous event of
+// the same type, and never a note.
+function openLog(racketId, type) {
+  const racket = S.rackets.find(r => r.id === racketId);
+  if (!racket) return;
+  logCtx = { racketId, type, editId: null };
+  const v = Object.assign({ date: isoDaysAgo(0), note: "" }, prefill(S, racketId, type));
+  showLog((type === "strings" ? "Restring " : "Regrip ") + racket.name, type, v);
+}
+
+// Editing reopens the same form loaded with that entry's own values, note
+// and date included, and Save replaces it instead of adding.
+function editEvent(id) {
+  const e = S.events.find(x => x.id === id);
+  if (!e) return;
+  const racket = S.rackets.find(r => r.id === e.racketId);
+  logCtx = { racketId: e.racketId, type: e.type, editId: id };
+  showLog("Edit " + (e.type === "strings" ? "restring" : "regrip") + ", " + racket.name, e.type, e);
 }
 
 function closeLog() {
@@ -211,17 +227,25 @@ function saveLog() {
   if (!logCtx) return;
   const date = document.getElementById("f-date").value;
   if (!isIsoDate(date)) { toast("Pick a date first"); return; }
-  const e = {
-    id: uid(), racketId: logCtx.racketId, type: logCtx.type, date,
+  const vals = {
+    date,
     cost: parseFloat(document.getElementById("f-cost").value),
     note: document.getElementById("f-note").value
   };
-  if (!isFinite(e.cost)) e.cost = null;
-  for (const f of DETAIL_FIELDS[logCtx.type]) e[f] = document.getElementById("f-" + f).value;
-  S.events.push(e);
+  if (!isFinite(vals.cost)) vals.cost = null;
+  for (const f of DETAIL_FIELDS[logCtx.type]) vals[f] = document.getElementById("f-" + f).value;
+
+  const verb = logCtx.editId ? "Updated" : "Logged";
+  if (logCtx.editId) {
+    const i = S.events.findIndex(x => x.id === logCtx.editId);
+    if (i < 0) return;
+    S.events[i] = Object.assign({}, S.events[i], vals);
+  } else {
+    S.events.push(Object.assign({ id: uid(), racketId: logCtx.racketId, type: logCtx.type }, vals));
+  }
   S = sanitizeState(S);
   persist(); closeLog(); render();
-  toast("Logged");
+  toast(verb);
 }
 
 function deleteEvent(id) {
@@ -274,7 +298,10 @@ function histRow(h) {
     <div class="hrow">
       <div class="hmain">
         <span><b>${h.type === "strings" ? "Strings" : "Grip"}</b> ${formatDate(e.date)} · ${span}</span>
-        <button class="del" onclick="deleteEvent('${esc(e.id)}')" aria-label="Delete entry">×</button>
+        <span class="hbtns">
+          <button class="edit" onclick="editEvent('${esc(e.id)}')">edit</button>
+          <button class="del" onclick="deleteEvent('${esc(e.id)}')" aria-label="Delete entry">×</button>
+        </span>
       </div>
       ${sub ? `<div class="hsub">${esc(sub)}</div>` : ""}
       ${e.note ? `<div class="hnote">${esc(e.note)}</div>` : ""}

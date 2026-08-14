@@ -202,6 +202,40 @@ describe("gear page, logging a restring", { skip: browser ? false : "no Chrome-l
   });
 });
 
+describe("gear page, editing a logged restring", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  // Edit must load the entry's own values (note and date included), and Save
+  // must replace it rather than add a second event. sanitizeState names an
+  // event without an id "e1".
+  const seed = `
+    S = sanitizeState({ rackets: S.rackets, life: S.life, events: [
+      { racketId: "r1", type: "strings", date: isoDaysAgo(13), string: "BG65", tension: "24 lbs", note: "felt dead early" }
+    ]});
+    render();
+    editEvent("e1");
+    document.body.dataset.editNote = document.getElementById("f-note").value;
+    document.getElementById("f-tension").value = "26 lbs";
+    saveLog();`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("titles the form as an edit of that racket", () => {
+    assert.match(dom, /Edit restring, Racket 1/);
+  });
+
+  test("loads the entry's own note, which a fresh log never does", () => {
+    assert.match(dom, /data-edit-note="felt dead early"/);
+  });
+
+  test("saves in place: new tension, same date, no duplicate entry", () => {
+    // The detail line, not the bare value: the closed form's inputs still
+    // carry their load-time value attributes in a serialized DOM.
+    assert.match(dom, /BG65 · 26 lbs/);
+    assert.doesNotMatch(dom, /BG65 · 24 lbs/);
+    assert.match(dom, /Restrung 13 days ago/);
+    assert.doesNotMatch(dom, /lasted/, "a second event would show a lasted interval");
+    assert.match(dom, /felt dead early/);
+  });
+});
+
 describe("gear page, saving a regrip", { skip: browser ? false : "no Chrome-like browser found" }, () => {
   // Drives the full save path: open the form, type a brand and cost, save.
   const seed = `
