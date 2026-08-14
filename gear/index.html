@@ -20,6 +20,9 @@
     --faint: #f5f5f4;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* The browser's own [hidden] rule loses to any author display property, so
+     without this a hidden .frow (display: flex) stays visible. */
+  [hidden] { display: none !important; }
   /* Without this, tapping buttons quickly on iOS is read as a double-tap and
      zooms the page. Pinch zoom still works. */
   button, input { touch-action: manipulation; }

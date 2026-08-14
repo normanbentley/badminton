@@ -173,7 +173,13 @@ describe("gear page, logging a restring", { skip: browser ? false : "no Chrome-l
       { racketId: "r1", type: "strings", date: isoDaysAgo(13), string: "BG65", tension: "24 lbs", color: "white", stringer: "Straight Sets", cost: 25 }
     ]});
     render();
-    openLog("r1", "strings");`;
+    openLog("r1", "strings");
+    // The hidden attribute alone once left rows visible because .frow's
+    // display: flex overrode the browser's [hidden] rule. Only the computed
+    // style proves what a player actually sees, so it is copied somewhere a
+    // DOM dump keeps.
+    document.body.dataset.gripRowDisplay = getComputedStyle(document.querySelector('[data-for="grip"]')).display;
+    document.body.dataset.stringRowDisplay = getComputedStyle(document.querySelector('[data-for="strings"]')).display;`;
   const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
 
   test("titles the form with the action and the racket", () => {
@@ -189,8 +195,10 @@ describe("gear page, logging a restring", { skip: browser ? false : "no Chrome-l
     assert.match(dom, /id="f-note"[^>]*value=""/);
   });
 
-  test("hides the grip fields on a restring", () => {
+  test("hides the grip fields on a restring, and really renders none of them", () => {
     assert.match(dom, /data-for="grip"[^>]*hidden/);
+    assert.match(dom, /data-grip-row-display="none"/);
+    assert.match(dom, /data-string-row-display="flex"/);
   });
 });
 
