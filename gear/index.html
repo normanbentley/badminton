@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#166534">
+<meta name="robots" content="noindex">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23166534'/%3E%3Cpath d='M26 40 L15 12 Q32 4 49 12 L38 40 Q32 43 26 40 Z' fill='white'/%3E%3Cpath d='M29 39 L24 9 M35 39 L40 9' stroke='%23166534' stroke-width='3' fill='none'/%3E%3Crect x='24' y='44' width='16' height='11' rx='5.5' fill='white'/%3E%3C/svg%3E">
+<title>Racket Ready</title>
+<style>
+  :root {
+    --accent: #166534;
+    --due: #b91c1c;
+    --bg: #fafaf9;
+    --card: #ffffff;
+    --line: #e7e5e4;
+    --ink: #1c1917;
+    --mut: #78716c;
+    --faint: #f5f5f4;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  /* Without this, tapping buttons quickly on iOS is read as a double-tap and
+     zooms the page. Pinch zoom still works. */
+  button, input { touch-action: manipulation; }
+  button { -webkit-user-select: none; user-select: none; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  header { padding: 20px 16px 12px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 .shu { flex: 0 0 auto; }
+  footer { padding: 20px 16px 8px; text-align: center; font-size: 12px; color: #a8a29e; }
+  main { padding: 0 16px; }
+  .card { border: 1px solid var(--line); background: var(--card); border-radius: 16px; margin-bottom: 12px; padding: 12px 16px 14px; }
+  .card h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+  h2.rname { cursor: pointer; }
+  .pen { font-size: 12px; font-weight: 400; color: var(--mut); margin-left: 6px; }
+  .item { border-top: 1px solid var(--faint); padding: 8px 0 2px; }
+  .itop { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .ilbl { font-size: 12px; font-weight: 600; color: #57534e; text-transform: uppercase; letter-spacing: .05em; }
+  .logbtn { border: 1px solid #b9dcc6; background: #f2faf5; color: var(--accent); font-size: 13px; font-weight: 600; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .istat { margin: 6px 0 8px; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .istat .ok { color: var(--accent); font-weight: 700; }
+  .istat .due { color: var(--due); font-weight: 700; }
+  .istat .none { color: #a8a29e; }
+  .hist { border-top: 1px solid var(--faint); margin-top: 4px; }
+  .hrow { padding: 7px 0; border-bottom: 1px solid var(--faint); font-size: 13px; color: var(--mut); }
+  .hrow:last-child { border-bottom: 0; }
+  .hmain { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+  .hmain b { color: #44403c; font-weight: 600; }
+  .del { border: 0; background: transparent; color: #a8a29e; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+  .hsub { margin-top: 2px; }
+  .hnote { margin-top: 2px; font-style: italic; }
+  .frow { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+  .frow label { flex: 0 0 72px; font-size: 14px; color: #57534e; }
+  .frow input { flex: 1; min-width: 0; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 12px; font-size: 16px; outline: none; }
+  .frow input:focus { border-color: var(--accent); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .row .lbl { font-size: 14px; color: #57534e; }
+  input.num {
+    width: 80px; border: 1px solid var(--line); background: #fff; border-radius: 10px;
+    padding: 10px 12px; font-size: 16px; font-weight: 600; text-align: right; outline: none;
+    font-variant-numeric: tabular-nums;
+  }
+  input.num:focus { border-color: var(--accent); }
+  input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+  input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .btns .save { flex: 1; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .05s; }
+  .btns .save:active { transform: scale(0.98); }
+  .btns .ghost { flex: 1; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 13px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .calc { margin: 6px 0 0; padding-top: 8px; border-top: 1px solid var(--faint); font-size: 13px; color: var(--mut); }
+  .toast { position: fixed; left: 50%; top: 20px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><svg class="shu" viewBox="0 0 64 64" width="26" height="26" aria-hidden="true"><rect width="64" height="64" rx="14" fill="var(--accent)"/><path d="M26 40 L15 12 Q32 4 49 12 L38 40 Q32 43 26 40 Z" fill="#fff"/><path d="M29 39 L24 9 M35 39 L40 9" stroke="var(--accent)" stroke-width="3" fill="none"/><rect x="24" y="44" width="16" height="11" rx="5.5" fill="#fff"/></svg>Racket Ready</h1>
+  </header>
+
+  <main>
+    <div id="rackets"></div>
+
+    <section class="card" id="logCard" hidden>
+      <h2 id="logTitle"></h2>
+      <div class="frow"><label for="f-date">Date</label><input id="f-date" type="date"></div>
+      <div class="frow" data-for="strings"><label for="f-string">String</label><input id="f-string" placeholder="e.g. BG65"></div>
+      <div class="frow" data-for="strings"><label for="f-tension">Tension</label><input id="f-tension" placeholder="e.g. 24 lbs"></div>
+      <div class="frow" data-for="strings"><label for="f-color">Colour</label><input id="f-color" placeholder="e.g. white"></div>
+      <div class="frow" data-for="strings"><label for="f-stringer">Stringer</label><input id="f-stringer" placeholder="shop or person"></div>
+      <div class="frow" data-for="grip"><label for="f-brand">Grip</label><input id="f-brand" placeholder="e.g. Karakal PU"></div>
+      <div class="frow"><label for="f-cost">Cost</label><input id="f-cost" type="number" inputmode="decimal" min="0" step="0.5" placeholder="optional"></div>
+      <div class="frow"><label for="f-note">Note</label><input id="f-note" placeholder="anything odd, e.g. felt dead early"></div>
+      <p class="calc">Only the date is required. The rest is for asking why later.</p>
+      <div class="btns">
+        <button class="ghost" onclick="closeLog()">Cancel</button>
+        <button class="save" onclick="saveLog()">Save</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Settings</h2>
+      <div class="row">
+        <span class="lbl">Strings should last (days)</span>
+        <input class="num" id="life-strings" type="number" inputmode="numeric" min="1" onfocus="selectAll(this)" oninput="setLife('strings', this.value)" onblur="render()">
+      </div>
+      <div class="row">
+        <span class="lbl">Grips should last (days)</span>
+        <input class="num" id="life-grip" type="number" inputmode="numeric" min="1" onfocus="selectAll(this)" oninput="setLife('grip', this.value)" onblur="render()">
+      </div>
+      <p class="calc">Days left compares each racket against these. Tap a racket's name to rename it.</p>
+    </section>
+  </main>
+
+  <footer>Everything is saved on this phone only. Nothing is sent anywhere.</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="calc.js"></script>
+<script>
+// All date maths lives in calc.js so it can be tested outside a browser.
+const { TYPES, DETAIL_FIELDS, VERBS, isIsoDate, formatDate, days,
+        ageLabel, leftLabel, sanitizeState, prefill, detailsLine, summarize } = RacketReady;
+
+const KEY = "badminton-gear-v1";
+let S = load();
+
+function load() {
+  try { return sanitizeState(JSON.parse(localStorage.getItem(KEY))); }
+  catch { return sanitizeState(null); }
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {}
+}
+
+// Built from local time on purpose: toISOString would use UTC, which is still
+// yesterday for half of any New Zealand morning.
+function isoDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  const p = x => String(x).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+}
+
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function uid() {
+  return "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// Select the whole value on focus so typing replaces it (no deleting the old
+// number first). Deferred because iOS Safari drops select() called during focus.
+function selectAll(el) { setTimeout(() => el.select(), 0); }
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+// Mirrors the value into the attribute as well, so a serialized DOM (which is
+// what the page tests read) shows what a user would see in the field.
+function setField(id, v) {
+  const el = document.getElementById(id);
+  el.value = v == null ? "" : v;
+  el.setAttribute("value", el.value);
+}
+
+let logCtx = null;
+
+function openLog(racketId, type) {
+  const racket = S.rackets.find(r => r.id === racketId);
+  if (!racket) return;
+  logCtx = { racketId, type };
+  document.getElementById("logTitle").textContent =
+    (type === "strings" ? "Restring " : "Regrip ") + racket.name;
+  for (const el of document.querySelectorAll("#logCard .frow[data-for]")) {
+    el.hidden = el.dataset.for !== type;
+  }
+  const p = prefill(S, racketId, type);
+  const today = isoDaysAgo(0);
+  document.getElementById("f-date").setAttribute("max", today);
+  setField("f-date", today);
+  for (const t of TYPES) for (const f of DETAIL_FIELDS[t]) setField("f-" + f, t === type ? p[f] : "");
+  setField("f-cost", p.cost);
+  setField("f-note", "");
+  const card = document.getElementById("logCard");
+  card.hidden = false;
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function closeLog() {
+  logCtx = null;
+  document.getElementById("logCard").hidden = true;
+}
+
+function saveLog() {
+  if (!logCtx) return;
+  const date = document.getElementById("f-date").value;
+  if (!isIsoDate(date)) { toast("Pick a date first"); return; }
+  const e = {
+    id: uid(), racketId: logCtx.racketId, type: logCtx.type, date,
+    cost: parseFloat(document.getElementById("f-cost").value),
+    note: document.getElementById("f-note").value
+  };
+  if (!isFinite(e.cost)) e.cost = null;
+  for (const f of DETAIL_FIELDS[logCtx.type]) e[f] = document.getElementById("f-" + f).value;
+  S.events.push(e);
+  S = sanitizeState(S);
+  persist(); closeLog(); render();
+  toast("Logged");
+}
+
+function deleteEvent(id) {
+  const e = S.events.find(x => x.id === id);
+  if (!e) return;
+  const what = e.type === "strings" ? "restring" : "regrip";
+  if (!confirm("Delete the " + what + " from " + formatDate(e.date) + "?")) return;
+  S.events = S.events.filter(x => x.id !== id);
+  persist(); render();
+}
+
+function renameRacket(id) {
+  const racket = S.rackets.find(r => r.id === id);
+  if (!racket) return;
+  const name = prompt("Racket name", racket.name);
+  if (name == null) return;
+  const clean = name.trim().slice(0, 40);
+  if (!clean) return;
+  racket.name = clean;
+  persist(); render();
+}
+
+function setLife(type, raw) {
+  const v = parseInt(raw, 10);
+  if (Number.isInteger(v) && v >= 1 && v <= 3650) { S.life[type] = v; persist(); }
+  render(true);
+}
+
+function itemRow(r, type) {
+  const st = r[type];
+  const stat = st
+    ? VERBS[type] + " " + ageLabel(st.ageDays) +
+      ' · <span class="' + (st.due ? "due" : "ok") + '">' + leftLabel(st.leftDays) + "</span>"
+    : '<span class="none">' + (type === "strings" ? "No restrings yet" : "No regrips yet") + "</span>";
+  return `
+    <div class="item">
+      <div class="itop">
+        <span class="ilbl">${type === "strings" ? "Strings" : "Grip"}</span>
+        <button class="logbtn" onclick="openLog('${esc(r.id)}','${type}')">${type === "strings" ? "Log restring" : "Log regrip"}</button>
+      </div>
+      <p class="istat">${stat}</p>
+    </div>`;
+}
+
+function histRow(h) {
+  const e = h.event;
+  const span = h.current ? "in use · " + days(h.soFarDays) + " so far" : "lasted " + days(h.lastedDays);
+  const sub = detailsLine(e);
+  return `
+    <div class="hrow">
+      <div class="hmain">
+        <span><b>${h.type === "strings" ? "Strings" : "Grip"}</b> ${formatDate(e.date)} · ${span}</span>
+        <button class="del" onclick="deleteEvent('${esc(e.id)}')" aria-label="Delete entry">×</button>
+      </div>
+      ${sub ? `<div class="hsub">${esc(sub)}</div>` : ""}
+      ${e.note ? `<div class="hnote">${esc(e.note)}</div>` : ""}
+    </div>`;
+}
+
+function racketCard(r) {
+  return `
+    <section class="card">
+      <h2 class="rname" onclick="renameRacket('${esc(r.id)}')">${esc(r.name)}<span class="pen">rename</span></h2>
+      ${TYPES.map(t => itemRow(r, t)).join("")}
+      ${r.history.length ? `<div class="hist">${r.history.map(histRow).join("")}</div>` : ""}
+    </section>`;
+}
+
+function render(skipInputs) {
+  const view = summarize(S, isoDaysAgo(0));
+  document.getElementById("rackets").innerHTML = view.rackets.map(racketCard).join("");
+  if (!skipInputs) {
+    setField("life-strings", S.life.strings);
+    setField("life-grip", S.life.grip);
+  }
+}
+
+render();
+</script>
+</body>
+</html>
