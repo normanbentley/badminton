@@ -150,7 +150,8 @@ describe("gear page, a rotation in progress", { skip: browser ? false : "no Chro
     assert.match(dom, /<span class="due">2 days overdue<\/span>/);
   });
 
-  test("shows how long the replaced strings actually lasted", () => {
+  test("shows how long the replaced strings actually lasted, under a History label", () => {
+    assert.match(dom, />History</);
     assert.match(dom, /lasted 28 days/);
   });
 
@@ -184,6 +185,11 @@ describe("gear page, logging a restring", { skip: browser ? false : "no Chrome-l
 
   test("titles the form with the action and the racket", () => {
     assert.match(dom, /Restring Racket 1/);
+  });
+
+  test("opens inside the tapped racket's strings slot, not below the page", () => {
+    assert.match(dom, /id="slot-r1-strings"><div class="logform" id="logCard">/);
+    assert.match(dom, /id="slot-r1-grip"><\/div>/, "the other slots stay empty");
   });
 
   test("prefills the previous details but never the note", () => {

@@ -46,21 +46,30 @@
   .item { border-top: 1px solid var(--faint); padding: 8px 0 2px; }
   .itop { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .ilbl { font-size: 12px; font-weight: 600; color: #57534e; text-transform: uppercase; letter-spacing: .05em; }
-  .logbtn { border: 1px solid #b9dcc6; background: #f2faf5; color: var(--accent); font-size: 13px; font-weight: 600; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .logbtn { border: 0; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 9px 14px; cursor: pointer; transition: transform .05s; }
+  .logbtn:active { transform: scale(0.96); }
   .istat { margin: 6px 0 8px; font-size: 15px; font-variant-numeric: tabular-nums; }
   .istat .ok { color: var(--accent); font-weight: 700; }
   .istat .due { color: var(--due); font-weight: 700; }
   .istat .none { color: #a8a29e; }
-  .hist { border-top: 1px solid var(--faint); margin-top: 4px; }
+  .hlbl { font-size: 12px; font-weight: 600; color: #57534e; text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
+  .hist { margin-top: 2px; }
   .hrow { padding: 7px 0; border-bottom: 1px solid var(--faint); font-size: 13px; color: var(--mut); }
   .hrow:last-child { border-bottom: 0; }
   .hmain { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
   .hmain b { color: #44403c; font-weight: 600; }
-  .hbtns { display: flex; align-items: center; flex: 0 0 auto; }
-  .edit { border: 0; background: transparent; color: #a8a29e; font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 6px; }
-  .del { border: 0; background: transparent; color: #a8a29e; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+  .hbtns { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  /* Thumb-sized targets: these are the only two buttons small enough to
+     mis-tap on a phone. */
+  .edit, .del { border: 0; background: var(--faint); color: #57534e; border-radius: 10px; cursor: pointer; min-height: 38px; transition: transform .05s; }
+  .edit { font-size: 13px; font-weight: 600; padding: 0 14px; }
+  .del { font-size: 18px; line-height: 1; width: 38px; }
+  .edit:active, .del:active { transform: scale(0.94); }
   .hsub { margin-top: 2px; }
   .hnote { margin-top: 2px; font-style: italic; }
+  .logform { background: var(--faint); border-radius: 12px; padding: 2px 12px 12px; margin: 10px 0; }
+  .logform h3 { font-size: 15px; font-weight: 600; margin: 10px 2px 2px; }
+  .logform .calc { border-top-color: var(--line); }
   .frow { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
   .frow label { flex: 0 0 72px; font-size: 14px; color: #57534e; }
   .frow input { flex: 1; min-width: 0; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 12px; font-size: 16px; outline: none; }
@@ -94,8 +103,9 @@
   <main>
     <div id="rackets"></div>
 
-    <section class="card" id="logCard" hidden>
-      <h2 id="logTitle"></h2>
+    <div id="formHome">
+    <div class="logform" id="logCard" hidden>
+      <h3 id="logTitle"></h3>
       <div class="frow"><label for="f-date">Date</label><input id="f-date" type="date"></div>
       <div class="frow" data-for="strings"><label for="f-string">String</label><input id="f-string" placeholder="e.g. BG65"></div>
       <div class="frow" data-for="strings"><label for="f-tension">Tension</label><input id="f-tension" placeholder="e.g. 24 lbs"></div>
@@ -109,7 +119,8 @@
         <button class="ghost" onclick="closeLog()">Cancel</button>
         <button class="save" onclick="saveLog()">Save</button>
       </div>
-    </section>
+    </div>
+    </div>
 
     <section class="card">
       <h2>Settings</h2>
@@ -182,6 +193,16 @@ function setField(id, v) {
 }
 
 let logCtx = null;
+const formEl = document.getElementById("logCard");
+
+// There is one log form, and it moves into the racket card it was opened
+// from, right under the item being logged, instead of sitting below the page
+// with only its title tying it to a racket. Closed, it returns to a fixed
+// home so a render never leaves it detached from the document.
+function placeForm() {
+  const slot = logCtx && document.getElementById("slot-" + logCtx.racketId + "-" + logCtx.type);
+  (slot || document.getElementById("formHome")).appendChild(formEl);
+}
 
 function showLog(title, type, v) {
   document.getElementById("logTitle").textContent = title;
@@ -193,9 +214,9 @@ function showLog(title, type, v) {
   for (const t of TYPES) for (const f of DETAIL_FIELDS[t]) setField("f-" + f, t === type ? v[f] || "" : "");
   setField("f-cost", v.cost);
   setField("f-note", v.note || "");
-  const card = document.getElementById("logCard");
-  card.hidden = false;
-  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  formEl.hidden = false;
+  placeForm();
+  formEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // A fresh entry: today's date, details prefilled from the previous event of
@@ -220,7 +241,8 @@ function editEvent(id) {
 
 function closeLog() {
   logCtx = null;
-  document.getElementById("logCard").hidden = true;
+  formEl.hidden = true;
+  placeForm();
 }
 
 function saveLog() {
@@ -287,6 +309,7 @@ function itemRow(r, type) {
         <button class="logbtn" onclick="openLog('${esc(r.id)}','${type}')">${type === "strings" ? "Log restring" : "Log regrip"}</button>
       </div>
       <p class="istat">${stat}</p>
+      <div class="formSlot" id="slot-${esc(r.id)}-${type}"></div>
     </div>`;
 }
 
@@ -313,13 +336,15 @@ function racketCard(r) {
     <section class="card">
       <h2 class="rname" onclick="renameRacket('${esc(r.id)}')">${esc(r.name)}<span class="pen">rename</span></h2>
       ${TYPES.map(t => itemRow(r, t)).join("")}
-      ${r.history.length ? `<div class="hist">${r.history.map(histRow).join("")}</div>` : ""}
+      ${r.history.length ? `<p class="hlbl">History</p><div class="hist">${r.history.map(histRow).join("")}</div>` : ""}
     </section>`;
 }
 
 function render(skipInputs) {
   const view = summarize(S, isoDaysAgo(0));
   document.getElementById("rackets").innerHTML = view.rackets.map(racketCard).join("");
+  // Rebuilding the cards detaches an open form; put it back in its slot.
+  placeForm();
   if (!skipInputs) {
     setField("life-strings", S.life.strings);
     setField("life-grip", S.life.grip);
