@@ -42,7 +42,7 @@
   .card { border: 1px solid var(--line); background: var(--card); border-radius: 16px; margin-bottom: 12px; padding: 12px 16px 14px; }
   .card h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
   h2.rname { cursor: pointer; }
-  .pen { font-size: 12px; font-weight: 400; color: var(--mut); margin-left: 6px; }
+  .pen { display: inline-block; font-size: 12px; font-weight: 600; color: #57534e; background: var(--faint); border-radius: 999px; padding: 4px 10px; margin-left: 8px; vertical-align: 2px; }
   .item { border-top: 1px solid var(--faint); padding: 8px 0 2px; }
   .itop { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .ilbl { font-size: 12px; font-weight: 600; color: #57534e; text-transform: uppercase; letter-spacing: .05em; }
@@ -63,7 +63,7 @@
   .hbtns { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
   /* Thumb-sized targets: these are the only two buttons small enough to
      mis-tap on a phone. */
-  .edit, .del { border: 0; background: var(--faint); color: #57534e; border-radius: 10px; cursor: pointer; min-height: 38px; transition: transform .05s; }
+  .edit, .del { border: 0; background: var(--faint); color: #57534e; border-radius: 999px; cursor: pointer; min-height: 38px; transition: transform .05s; }
   .edit { font-size: 13px; font-weight: 600; padding: 0 12px; }
   .del { font-size: 18px; line-height: 1; width: 38px; }
   .edit:active, .del:active { transform: scale(0.94); }
@@ -87,9 +87,9 @@
   input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
   input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .btns { display: flex; gap: 8px; margin-top: 12px; }
-  .btns .save { flex: 1; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .05s; }
+  .btns .save { flex: 1; border: 0; border-radius: 999px; background: var(--accent); color: #fff; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .05s; }
   .btns .save:active { transform: scale(0.98); }
-  .btns .ghost { flex: 1; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 13px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btns .ghost { flex: 1; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 999px; padding: 13px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .calc { margin: 6px 0 0; padding-top: 8px; border-top: 1px solid var(--faint); font-size: 13px; color: var(--mut); }
   .toast { position: fixed; left: 50%; top: 20px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
