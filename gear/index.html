@@ -58,11 +58,13 @@
   .hrow:last-child { border-bottom: 0; }
   .hmain { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
   .hmain b { color: #44403c; font-weight: 600; }
+  .hwho { flex: 1; min-width: 0; }
+  .hdur { margin-top: 1px; }
   .hbtns { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
   /* Thumb-sized targets: these are the only two buttons small enough to
      mis-tap on a phone. */
   .edit, .del { border: 0; background: var(--faint); color: #57534e; border-radius: 10px; cursor: pointer; min-height: 38px; transition: transform .05s; }
-  .edit { font-size: 13px; font-weight: 600; padding: 0 14px; }
+  .edit { font-size: 13px; font-weight: 600; padding: 0 12px; }
   .del { font-size: 18px; line-height: 1; width: 38px; }
   .edit:active, .del:active { transform: scale(0.94); }
   .hsub { margin-top: 2px; }
@@ -315,12 +317,15 @@ function itemRow(r, type) {
 
 function histRow(h) {
   const e = h.event;
-  const span = h.current ? "in use · " + days(h.soFarDays) + " so far" : "lasted " + days(h.lastedDays);
+  const dur = h.current ? "in use · " + days(h.soFarDays) + " so far" : "lasted " + days(h.lastedDays);
   const sub = detailsLine(e);
   return `
     <div class="hrow">
       <div class="hmain">
-        <span><b>${h.type === "strings" ? "Strings" : "Grip"}</b> ${formatDate(e.date)} · ${span}</span>
+        <div class="hwho">
+          <div><b>${h.type === "strings" ? "Strings" : "Grip"}</b> ${formatDate(e.date)}</div>
+          <div class="hdur">${dur}</div>
+        </div>
         <span class="hbtns">
           <button class="edit" onclick="editEvent('${esc(e.id)}')">edit</button>
           <button class="del" onclick="deleteEvent('${esc(e.id)}')" aria-label="Delete entry">×</button>
