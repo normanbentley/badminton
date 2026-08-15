@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#166534">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Drills">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23166534'/%3E%3Cpath d='M26 40 L15 12 Q32 4 49 12 L38 40 Q32 43 26 40 Z' fill='white'/%3E%3Cpath d='M29 39 L24 9 M35 39 L40 9' stroke='%23166534' stroke-width='3' fill='none'/%3E%3Crect x='24' y='44' width='16' height='11' rx='5.5' fill='white'/%3E%3C/svg%3E">
+<title>Drill Deck</title>
+<style>
+  :root {
+    --accent: #166534;
+    --bg: #fafaf9;
+    --card: #ffffff;
+    --line: #e7e5e4;
+    --ink: #1c1917;
+    --mut: #78716c;
+    --faint: #f5f5f4;
+    --yes: #15803d;
+    --no: #dc2626;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  header { padding: 20px 16px 8px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  .back { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--mut); text-decoration: none; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; }
+  header p { margin: 4px 0 0; font-size: 14px; color: var(--mut); }
+  .tabs { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 6px 16px 8px; }
+  .tabrow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; background: #e7e5e4; border-radius: 12px; padding: 4px; }
+  .tabrow button { border: 0; background: transparent; padding: 9px 4px; border-radius: 8px; font-size: 14px; font-weight: 600; color: var(--mut); cursor: pointer; }
+  .tabrow button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  main { padding: 0 16px; }
+
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; color: var(--mut); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .chips button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+  .drill { border: 1px solid var(--line); background: var(--card); border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
+  .dhead { display: flex; align-items: center; gap: 10px; padding: 12px; cursor: pointer; }
+  .dhead .n { flex: 1; min-width: 0; }
+  .dhead .n b { display: block; font-size: 15px; font-weight: 600; }
+  .dhead .n small { font-size: 12px; color: #a8a29e; }
+  .dhead .add { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .dhead .add.in { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .dbody { border-top: 1px solid var(--faint); padding: 10px 14px 14px; font-size: 14px; line-height: 1.45; color: #44403c; }
+  .dbody .sec { margin-top: 10px; }
+  .dbody .sec:first-child { margin-top: 0; }
+  .dbody .sec b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #a8a29e; margin-bottom: 2px; font-weight: 700; }
+  .dbody ul { margin: 2px 0 0; padding-left: 18px; }
+  .dbody li { margin: 2px 0; }
+  .lv { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: 1px; }
+  .lv i { font-style: normal; font-size: 10px; font-weight: 700; color: #fff; background: #a8a29e; border-radius: 4px; padding: 1px 4px; }
+  .lv i.B { background: #0369a1; } .lv i.I { background: #b45309; } .lv i.S { background: #15803d; }
+
+  /* Swipe deck */
+  .deck { position: relative; }
+  .swipecard { position: relative; touch-action: pan-y; user-select: none; -webkit-user-select: none; will-change: transform; }
+  .swipecard.snap { transition: transform .22s ease-out; }
+  .swipecard.gone { transition: transform .2s ease-in, opacity .2s ease-in; opacity: 0; }
+  .stamp {
+    position: absolute; top: 14px; z-index: 3; border: 3px solid; border-radius: 10px;
+    padding: 4px 12px; font-size: 20px; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; opacity: 0; pointer-events: none;
+  }
+  .stamp.yes { left: 14px; color: var(--yes); border-color: var(--yes); transform: rotate(-12deg); }
+  .stamp.no { right: 14px; color: var(--no); border-color: var(--no); transform: rotate(12deg); }
+  .deckbtns { display: flex; gap: 10px; margin: 0 0 10px; }
+  .deckbtns button { flex: 1; padding: 15px 8px; border-radius: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .deckbtns .skip { border: 1px solid var(--line); background: #fff; color: #57534e; }
+  .deckbtns .take { border: 0; background: var(--accent); color: #fff; }
+  .deckbtns .undo { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; color: #57534e; padding: 15px 16px; }
+  .deckbtns .undo:disabled { opacity: .35; }
+  .deckmeta { text-align: center; font-size: 12px; color: #a8a29e; margin: 0 0 14px; }
+
+  /* Tonight */
+  .totals { display: flex; gap: 8px; margin: 0 0 10px; }
+  .tile { flex: 1; border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px; text-align: center; background: var(--faint); }
+  .tile b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .tile small { font-size: 11px; color: var(--mut); display: block; }
+  .tnum { flex: 0 0 auto; width: 24px; font-size: 13px; font-weight: 700; color: #a8a29e; text-align: center; font-variant-numeric: tabular-nums; }
+  .rowbtn { width: 34px; height: 34px; border: 1px solid var(--line); background: #fff; border-radius: 8px; color: #57534e; font-size: 14px; cursor: pointer; flex: 0 0 auto; }
+  .rowbtn.x { color: var(--no); border-color: #fecaca; }
+  .acts { display: flex; gap: 8px; margin: 14px 0 0; }
+  .acts button { flex: 1; border: 1px solid var(--line); background: #fff; color: #57534e; border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .acts button.clear { color: var(--no); border-color: #fecaca; }
+
+  .empty { margin-top: 16px; border: 1px dashed #d6d3d1; background: #fff; border-radius: 16px; padding: 36px 16px; text-align: center; }
+  .empty p { margin: 0; }
+  .empty .b { font-weight: 600; color: #57534e; }
+  .empty .s { font-size: 14px; color: #a8a29e; margin-top: 4px; }
+  .toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: #1c1917; color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.25); z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .hidden { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { .swipecard { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="dot"></span>Drill Deck<a class="back hidden" id="backlink" href="../">All apps</a></h1>
+    <p>Swipe through drills, keep the ones you fancy, and take the list to the hall.</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tabrow">
+      <button id="tab-deck" class="on" onclick="setTab('deck')">Swipe</button>
+      <button id="tab-all" onclick="setTab('all')">All drills</button>
+      <button id="tab-night" onclick="setTab('night')">Tonight</button>
+    </div>
+  </div>
+
+  <main id="view-deck">
+    <div class="chips" id="catchips"></div>
+    <div class="chips" id="lvchips"></div>
+    <div id="deck" class="deck"></div>
+  </main>
+
+  <main id="view-all" class="hidden">
+    <div class="chips" id="catchips2"></div>
+    <div class="chips" id="lvchips2"></div>
+    <div id="alllist"></div>
+  </main>
+
+  <main id="view-night" class="hidden"></main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Drill Deck: browse the core drill library one card at a time and build
+// tonight's shortlist. No session maths, no timers, no warm-up or warm-down
+// drills. Those live in Session Coach; this app is the idea generator.
+const CATS = {
+  footwork: "Footwork", strokes: "Strokes", net: "Net",
+  serve: "Serving", games: "Games", fun: "Fun"
+};
+const LEVELS = { B: "Beginner", I: "Improver", S: "Strong" };
+
+// min = suggested minutes with one group; lv = the levels it suits. Every
+// drill carries an easier and harder variation so one drill covers a mixed
+// group.
+const DRILLS = [
+  { key:"corners", name:"Six-corner shadow", cat:"footwork", lv:["I","S"], min:8, need:"Nothing",
+    setup:"One player per half-court standing at their base; coach at the net facing them.",
+    run:"Coach points to a corner; players split-step, travel, shadow the shot and recover to base. Work 30 to 40 seconds, rest while the next pair goes.",
+    pts:["Split-step the moment the coach points","Lunge with the racquet-side leg","Get back to base before the next point"],
+    easier:"Front two and back two corners only.", harder:"Faster calls, and a full racquet swing at every corner." },
+  { key:"fan", name:"Shuttle fan runs", cat:"footwork", lv:["B","I","S"], min:8, need:"5 shuttles per player going",
+    setup:"Five shuttles spread along the net; player starts on the back line, centre.",
+    run:"Run in, bring one shuttle back to the back line at a time. Time each player; rest between turns while others go.",
+    pts:["Low pick-up with bent knees","Push off hard out of the turn","Pace it, don't die at shuttle three"],
+    easier:"Three shuttles.", harder:"Carry each shuttle on the racquet face." },
+  { key:"splitstep", name:"Split-step reaction", cat:"footwork", lv:["B","I","S"], min:6, need:"Nothing",
+    setup:"Players in a line along the service line facing the coach.",
+    run:"Coach claps, then points left, right or forward. Players split-step on the clap and push off in the pointed direction, then recover.",
+    pts:["Land toes-first with a wide base","Push off the outside foot","Small hop, not a big jump"],
+    easier:"Longer pause between clap and point.", harder:"Point a second direction before they finish recovering." },
+
+  { key:"lift", name:"Lunge and lift", cat:"strokes", lv:["B","I"], min:8, need:"Box of shuttles",
+    setup:"Coach at the net with shuttles; player starts mid-court.",
+    run:"Coach hand-feeds low at the net; player lunges, lifts high to the back tram and recovers to base. 8 feeds each, then rotate the group.",
+    pts:["Reach with the racquet-side leg","Long swing from knee height up","Recover to base after every shot"],
+    easier:"Player starts closer to the net; feed slower.", harder:"Alternate forehand and backhand net corners." },
+  { key:"clear", name:"Overhead clear from feed", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, 2 cones for the target zone",
+    setup:"Coach feeds high from mid-court; player waits at the back. Cone off a back-tram target zone on the far side.",
+    run:"Player clears each feed into the target zone. 8 each, rotate, count zone hits out loud.",
+    pts:["Turn side-on, non-racquet arm up","Hit it high and in front of you","Full follow-through"],
+    easier:"Shorter hand feed, target is anywhere past the doubles service line.", harder:"Alternate straight and cross-court clears." },
+  { key:"drop", name:"Clear and drop ladder", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, cones in the front court",
+    setup:"Coach feeds high serves; cones mark a front-court target either side.",
+    run:"Player alternates a clear then a drop shot at the cones. 8 feeds each, rotate.",
+    pts:["Same preparation for both shots","Slow the strings for the drop","Drop travels down, not flat"],
+    easier:"All drops, no alternating.", harder:"Coach calls 'clear' or 'drop' late, after the feed is up." },
+  { key:"smash", name:"Smash from feed", cat:"strokes", lv:["I","S"], min:8, need:"Shuttles, 2 cones mid-court",
+    setup:"Coach feeds a high mid-court feed; two cones mark the smash target corridor.",
+    run:"Player smashes each feed between the cones, then resets to ready position. 6 each, and rotate often, because smashing is tiring.",
+    pts:["Contact in front of the body","Hit down steeply, not far","Snap and follow through, then racquet back up"],
+    easier:"Standing smash from a close, friendly feed.", harder:"Smash, then sprint in to kill a second feed at the net." },
+  { key:"drive", name:"Drive rally pairs", cat:"strokes", lv:["I","S"], min:6, need:"A shuttle per pair",
+    setup:"Pairs face each other mid-court across the net.",
+    run:"Keep a flat drive rally going as long as possible. Best streak out of three attempts wins.",
+    pts:["Racquet up between every shot","Short, punchy swing","Strings facing where you want it to go"],
+    easier:"Allow a gentle arc over the net.", harder:"Backhand drives only." },
+
+  { key:"hairpin", name:"Tight net shots", cat:"net", lv:["B","I","S"], min:7, need:"Box of shuttles",
+    setup:"Player in the front court; coach feeds loose net shots from the other side.",
+    run:"Player steps in and plays a tight hairpin back over. Score a point if it lands inside the service line. 8 each, rotate.",
+    pts:["Relaxed grip, strings slide under the shuttle","Take it as early and high as you can","Lunge in, don't stand and reach"],
+    easier:"Let them catch the shuttle on the strings and place it over.", harder:"Alternate straight and cross-court net shots." },
+  { key:"netkill", name:"Net-kill reaction", cat:"net", lv:["I","S"], min:6, need:"Box of shuttles",
+    setup:"Player at the net, racquet up; coach flicks loose feeds just above the tape.",
+    run:"Player taps each one down for a kill. 8 each, rotate.",
+    pts:["Racquet up before the feed comes","Short tap, no backswing","Don't touch the net, so control the follow-through"],
+    easier:"Higher, slower feeds.", harder:"Mix in one tight feed that must be hairpinned instead of killed, so they have to read it." },
+  { key:"triangle", name:"Drop, net and lift triangle", cat:"net", lv:["S"], min:8, need:"A shuttle per pair",
+    setup:"Two players per half-court, one either side of the net.",
+    run:"Fixed pattern: A lifts, B drops, A plays a net shot, B lifts, and it repeats the other way. Keep the pattern alive as long as possible.",
+    pts:["Recover between every shot","Quality beats speed, so keep the pattern alive","Tight net shots, deep lifts"],
+    easier:"Coach plays one side of the pattern.", harder:"After six shots the rally goes open, so play the point out." },
+
+  { key:"lowserve", name:"Low serve targets", cat:"serve", lv:["B","I","S"], min:7, need:"Shuttles, hoops or cones",
+    setup:"Hoops just beyond the short service line in each box.",
+    run:"10 backhand low serves each at the hoops. Count hits; rotate servers and shuttle collectors.",
+    pts:["Contact below the waist","Push the shuttle, don't hit it","Skim the tape, because low beats accurate"],
+    easier:"Bigger target zone, forehand serve allowed.", harder:"Coach holds a racquet a hand above the tape, and they serve under it." },
+  { key:"highserve", name:"High serve boxes", cat:"serve", lv:["B","I"], min:7, need:"Shuttles, cones for back boxes",
+    setup:"Cone off target boxes in the back trams diagonally opposite the server.",
+    run:"10 forehand high serves each into the box. Count hits; rotate.",
+    pts:["Relaxed, long swing","Weight moves back foot to front","Shuttle should fall steeply, near the back line"],
+    easier:"Target is anywhere behind the doubles service line.", harder:"Back tram only, and alternate which box." },
+  { key:"servepressure", name:"Serve and return pressure", cat:"serve", lv:["S"], min:8, need:"Shuttles",
+    setup:"Server against returner on a half-court.",
+    run:"Server serves low; returner attacks it; play the point out to a maximum of three shots. Five serves, then swap roles.",
+    pts:["Server: mix in the occasional flick to keep them honest","Returner: racquet up, take the serve early","First three shots decide most rallies"],
+    easier:"Cooperative returns, no point played.", harder:"Full rally, point counts, first to 5." },
+
+  { key:"kotc", name:"King of the court 2v2", cat:"games", lv:["B","I","S"], min:10, need:"Shuttles",
+    setup:"Two pairs on court; coach feeds from the side.",
+    run:"Coach feeds a rally in; play the point. Winning pair stays, coach gives the next feed. First pair to 5 points, then re-mix the pairs.",
+    pts:["Give each game one focus: 'serve low', 'cover your partner'","Feed to the weaker side sometimes so everyone hits"],
+    easier:"Coach feeds friendly, high feeds.", harder:"Losing pair does the next feed as a proper low serve." },
+  { key:"attackdef", name:"Attack against defence 2v2", cat:"games", lv:["I","S"], min:10, need:"Shuttles",
+    setup:"One pair attacks, one defends.",
+    run:"Attackers may only hit downward or flat; defenders may only lift and block. Coach feeds a lift to start each rally. Swap roles after 5 rallies.",
+    pts:["Defenders: low base, wide stance, racquet in front","Attackers: hit steep, not hard","Attackers stay front-and-back, defenders side-by-side"],
+    easier:"Attackers start closer to the net; softer feeds.", harder:"A defensive winner counts double." },
+  { key:"halfsingles", name:"Half-court singles ladder", cat:"games", lv:["I","S"], min:10, need:"Shuttles",
+    setup:"Split the court down the middle: two half-court singles games side by side.",
+    run:"First to 5. Winners play each other, losers play each other, repeat.",
+    pts:["Half-court rewards length, so clear deep and drop short","Recover to base between shots"],
+    easier:"Rally to 3; serve anywhere.", harder:"Clears and drops only, no smashing on a half court." },
+  { key:"targets", name:"Target zone doubles", cat:"games", lv:["B","I","S"], min:10, need:"Shuttles, cones",
+    setup:"Normal 2v2, back tram coned off as the bonus zone.",
+    run:"Normal scoring, but a shuttle landing in the bonus zone scores 2. First to 7.",
+    pts:["Rewards length without saying 'hit it deeper'","Call the bonus shots loudly and players chase them"],
+    easier:"Anywhere behind the doubles service line counts.", harder:"Net kills also score 2, so it is length or kill, nothing in between." },
+
+  { key:"battleship", name:"Shuttle battleship", cat:"fun", lv:["B","I"], min:8, need:"8 shuttle tubes or tall cones, shuttles",
+    setup:"Each team stands 4 tubes upright on their back tram as their ships.",
+    run:"Teams take turns serving high; knock over all the enemy ships to win.",
+    pts:["It is high-serve practice in disguise, so demand a long relaxed swing","Serve from behind the service line, proper technique or it doesn't count"],
+    easier:"Throw the shuttle instead of serving.", harder:"Must serve from inside the service box, and backhand serves score double." },
+  { key:"aroundworld", name:"Around the world", cat:"fun", lv:["B","I","S"], min:8, need:"Box of shuttles",
+    setup:"Players queue at one side; coach feeds from the other side of the net.",
+    run:"Each player hits one shot then sprints to the back of the queue. Miss and you lose a life; three lives each, last player standing wins.",
+    pts:["Get back in the queue fast, because the drill punishes ball-watching","Watch the feed early, split-step before it"],
+    easier:"Friendly feeds, unlimited lives, just keep it flowing.", harder:"Two shuttles in play at once." }
+];
+
+const PICKKEY = "badminton-drills-tonight-v1";
+
+// picked = tonight's shortlist, in the order they were chosen.
+let picked = [];
+try {
+  const p = JSON.parse(localStorage.getItem(PICKKEY));
+  if (Array.isArray(p)) picked = p.filter(k => DRILLS.some(d => d.key === k));
+} catch {}
+function persist() { try { localStorage.setItem(PICKKEY, JSON.stringify(picked)); } catch {} }
+
+let catFilter = "all", lvFilter = "all";
+let expanded = null;                 // drill open in the All list
+let expandedNight = null;            // drill open in Tonight
+let deck = { keys: [], pos: 0, history: [] };
+let tab = "deck";
+
+function drill(k) { return DRILLS.find(d => d.key === k); }
+function isPicked(k) { return picked.includes(k); }
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1500);
+}
+
+function setTab(t) {
+  tab = t;
+  ["deck","all","night"].forEach(x => {
+    document.getElementById("tab-"+x).classList.toggle("on", x===t);
+    document.getElementById("view-"+x).classList.toggle("hidden", x!==t);
+  });
+  if (t === "deck") renderDeck();
+  if (t === "all") renderAll();
+  if (t === "night") renderNight();
+}
+
+function labelTabs() {
+  document.getElementById("tab-night").textContent = picked.length ? `Tonight (${picked.length})` : "Tonight";
+}
+
+function matches(d) {
+  return (catFilter === "all" || d.cat === catFilter) && (lvFilter === "all" || d.lv.includes(lvFilter));
+}
+function chipsHTML(which) {
+  if (which === "cat") {
+    return ["all", ...Object.keys(CATS)].map(c =>
+      `<button class="${catFilter===c?"on":""}" onclick="setFilter('cat','${c}')">${c==="all"?"All types":CATS[c]}</button>`).join("");
+  }
+  return ["all", ...Object.keys(LEVELS)].map(l =>
+    `<button class="${lvFilter===l?"on":""}" onclick="setFilter('lv','${l}')">${l==="all"?"All levels":LEVELS[l]}</button>`).join("");
+}
+function renderChips() {
+  document.getElementById("catchips").innerHTML = chipsHTML("cat");
+  document.getElementById("lvchips").innerHTML = chipsHTML("lv");
+  document.getElementById("catchips2").innerHTML = chipsHTML("cat");
+  document.getElementById("lvchips2").innerHTML = chipsHTML("lv");
+}
+function setFilter(which, v) {
+  if (which === "cat") catFilter = v; else lvFilter = v;
+  renderChips();
+  buildDeck();
+  if (tab === "deck") renderDeck(); else renderAll();
+}
+
+function levelTags(d) { return `<span class="lv">${d.lv.map(l=>`<i class="${l}">${l}</i>`).join("")}</span>`; }
+function drillBody(d) {
+  return `<div class="dbody">
+    <div class="sec"><b>Needs</b>${d.need}</div>
+    <div class="sec"><b>Setup</b>${d.setup}</div>
+    <div class="sec"><b>Run it</b>${d.run}</div>
+    <div class="sec"><b>Coaching points</b><ul>${d.pts.map(p=>`<li>${p}</li>`).join("")}</ul></div>
+    <div class="sec"><b>Easier</b>${d.easier}</div>
+    <div class="sec"><b>Harder</b>${d.harder}</div>
+  </div>`;
+}
+
+// ---- Swipe deck ----
+// The deck deals the filtered library in random order. Drills already on
+// tonight's list are stepped over, so adding one from the All tab keeps it
+// out of the deck too.
+
+function buildDeck() {
+  const keys = DRILLS.filter(matches).map(d => d.key);
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  deck = { keys, pos: 0, history: [] };
+  skipPicked();
+}
+function skipPicked() {
+  while (deck.pos < deck.keys.length && isPicked(deck.keys[deck.pos])) deck.pos++;
+}
+function currentKey() { return deck.pos < deck.keys.length ? deck.keys[deck.pos] : null; }
+
+function renderDeck() {
+  const el = document.getElementById("deck");
+  // Adding from the All tab does not touch the deck, so step over anything
+  // already kept before dealing rather than showing it twice.
+  skipPicked();
+  const k = currentKey();
+  if (!k) {
+    const seen = deck.keys.length;
+    el.innerHTML = `<div class="empty">
+        <p class="b">${seen ? "That is every drill" : "Nothing matches those filters"}</p>
+        <p class="s">${seen
+          ? `You have been through all ${seen}. ${picked.length ? `${picked.length} on tonight's list.` : "Nothing kept yet."}`
+          : "Try a different type or level."}</p>
+      </div>
+      <div class="deckbtns" style="margin-top:12px">
+        <button class="skip" onclick="buildDeck();renderDeck()">Shuffle again</button>
+        <button class="take" onclick="setTab('night')">See tonight's list</button>
+      </div>`;
+    return;
+  }
+  const d = drill(k);
+  el.innerHTML = `
+    <div class="drill swipecard" id="card">
+      <div class="stamp yes" id="stampYes">Keep</div>
+      <div class="stamp no" id="stampNo">Skip</div>
+      <div class="dhead" style="cursor:default">
+        <div class="n"><b>${d.name}${levelTags(d)}</b><small>${CATS[d.cat]} · about ${d.min} min</small></div>
+      </div>
+      ${drillBody(d)}
+    </div>
+    <div class="deckbtns">
+      <button class="undo" onclick="undoSwipe()" ${deck.history.length ? "" : "disabled"} aria-label="undo">↩</button>
+      <button class="skip" onclick="swipe(-1)">Skip</button>
+      <button class="take" onclick="swipe(1)">Keep it</button>
+    </div>
+    <div class="deckmeta">${deck.pos + 1} of ${deck.keys.length} · swipe right to keep, left to skip</div>`;
+  bindDrag();
+}
+
+const SWIPE_MIN = 80;   // px of travel before a drag counts as a decision
+function bindDrag() {
+  const card = document.getElementById("card");
+  if (!card) return;
+  const yes = document.getElementById("stampYes"), no = document.getElementById("stampNo");
+  let x0 = 0, dx = 0, active = false;
+
+  card.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    active = true; x0 = e.clientX; dx = 0;
+    card.classList.remove("snap");
+    try { card.setPointerCapture(e.pointerId); } catch {}
+  });
+  card.addEventListener("pointermove", e => {
+    if (!active) return;
+    dx = e.clientX - x0;
+    card.style.transform = `translateX(${dx}px) rotate(${dx / 28}deg)`;
+    const t = Math.min(1, Math.abs(dx) / SWIPE_MIN);
+    yes.style.opacity = dx > 0 ? t : 0;
+    no.style.opacity = dx < 0 ? t : 0;
+  });
+  const release = () => {
+    if (!active) return;
+    active = false;
+    if (Math.abs(dx) >= SWIPE_MIN) { swipe(dx > 0 ? 1 : -1); return; }
+    card.classList.add("snap");
+    card.style.transform = "";
+    yes.style.opacity = 0; no.style.opacity = 0;
+  };
+  card.addEventListener("pointerup", release);
+  card.addEventListener("pointercancel", release);
+}
+
+// dir: 1 keeps the drill, -1 skips it. Animates the card out, then commits.
+function swipe(dir) {
+  const k = currentKey();
+  if (!k) return;
+  const card = document.getElementById("card");
+  deck.history.push({ pos: deck.pos, key: k, kept: dir > 0 });
+  if (dir > 0 && !isPicked(k)) { picked.push(k); persist(); }
+  if (card) {
+    const stamp = document.getElementById(dir > 0 ? "stampYes" : "stampNo");
+    if (stamp) stamp.style.opacity = 1;
+    card.classList.remove("snap");
+    card.classList.add("gone");
+    card.style.transform = `translateX(${dir * 480}px) rotate(${dir * 18}deg)`;
+  }
+  deck.pos++;
+  skipPicked();
+  labelTabs();
+  setTimeout(() => { if (tab === "deck") renderDeck(); }, card ? 190 : 0);
+}
+
+function undoSwipe() {
+  const last = deck.history.pop();
+  if (!last) return;
+  if (last.kept) {
+    const i = picked.indexOf(last.key);
+    if (i >= 0) { picked.splice(i, 1); persist(); }
+  }
+  deck.pos = last.pos;
+  labelTabs(); renderDeck();
+  toast(`Back to ${drill(last.key).name}`);
+}
+
+// ---- All drills ----
+function renderAll() {
+  const list = DRILLS.filter(matches);
+  document.getElementById("alllist").innerHTML = list.length ? list.map(d => {
+    const inPlan = isPicked(d.key);
+    return `<div class="drill">
+      <div class="dhead" onclick="toggleAll('${d.key}')">
+        <div class="n"><b>${d.name}${levelTags(d)}</b><small>${CATS[d.cat]} · about ${d.min} min</small></div>
+        <button class="add ${inPlan?"in":""}" onclick="event.stopPropagation();togglePick('${d.key}')">${inPlan?"✓ Tonight":"+ Add"}</button>
+      </div>
+      ${expanded === d.key ? drillBody(d) : ""}
+    </div>`;
+  }).join("") : `<div class="empty"><p class="b">Nothing matches those filters</p><p class="s">Try a different type or level.</p></div>`;
+}
+function toggleAll(k) { expanded = expanded === k ? null : k; renderAll(); }
+function togglePick(k) {
+  const i = picked.indexOf(k);
+  if (i >= 0) { picked.splice(i, 1); toast("Taken off tonight"); }
+  else { picked.push(k); toast("Added to tonight"); }
+  persist(); labelTabs();
+  if (tab === "all") renderAll(); else renderNight();
+}
+
+// ---- Tonight ----
+function renderNight() {
+  const el = document.getElementById("view-night");
+  if (!picked.length) {
+    el.innerHTML = `<div class="empty">
+        <p class="b">Nothing picked yet</p>
+        <p class="s">Swipe right on a drill, or add one from the All drills tab.</p>
+      </div>
+      <div class="deckbtns" style="margin-top:12px">
+        <button class="take" onclick="setTab('deck')">Start swiping</button>
+      </div>`;
+    return;
+  }
+  const mins = picked.reduce((a, k) => a + drill(k).min, 0);
+  const cats = new Set(picked.map(k => drill(k).cat));
+  el.innerHTML = `
+    <div class="totals">
+      <div class="tile"><b>${picked.length}</b><small>drill${picked.length===1?"":"s"}</small></div>
+      <div class="tile"><b>${mins}m</b><small>of material</small></div>
+      <div class="tile"><b>${cats.size}</b><small>type${cats.size===1?"":"s"} covered</small></div>
+    </div>
+    ${picked.map((k, i) => {
+      const d = drill(k);
+      return `<div class="drill">
+        <div class="dhead" onclick="toggleNight('${k}')">
+          <div class="tnum">${i+1}</div>
+          <div class="n"><b>${d.name}${levelTags(d)}</b><small>${CATS[d.cat]} · about ${d.min} min · tap for details</small></div>
+          ${i > 0 ? `<button class="rowbtn" onclick="event.stopPropagation();movePick(${i},-1)" aria-label="move up">↑</button>` : ""}
+          <button class="rowbtn x" onclick="event.stopPropagation();togglePick('${k}')" aria-label="remove">✕</button>
+        </div>
+        ${expandedNight === k ? drillBody(d) : ""}
+      </div>`;
+    }).join("")}
+    <div class="acts">
+      <button onclick="copyNight()">Copy the list</button>
+      <button class="clear" onclick="clearNight()">Clear all</button>
+    </div>`;
+}
+function toggleNight(k) { expandedNight = expandedNight === k ? null : k; renderNight(); }
+function movePick(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= picked.length) return;
+  [picked[i], picked[j]] = [picked[j], picked[i]];
+  persist(); renderNight();
+}
+function clearNight() {
+  if (!confirm("Clear tonight's list?")) return;
+  picked = []; persist(); labelTabs(); renderNight();
+}
+function copyNight() {
+  const txt = "Tonight's drills\n" + picked.map((k, i) => {
+    const d = drill(k);
+    return `${i+1}. ${d.name} (${CATS[d.cat]}, about ${d.min} min)`;
+  }).join("\n");
+  const done = () => toast("Copied");
+  try {
+    navigator.clipboard.writeText(txt).then(done, () => fallbackCopy(txt, done));
+  } catch { fallbackCopy(txt, done); }
+}
+function fallbackCopy(txt, done) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    done();
+  } catch { toast("Could not copy"); }
+}
+
+// Show the hub back link only on browsers that have visited the landing page.
+try { if (localStorage.getItem("badminton-hub-v1")) document.getElementById("backlink").classList.remove("hidden"); } catch {}
+
+renderChips();
+buildDeck();
+labelTabs();
+setTab("deck");
+</script>
+</body>
+</html>
