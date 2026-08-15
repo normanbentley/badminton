@@ -83,12 +83,25 @@
   .deckbtns .undo:disabled { opacity: .35; }
   .deckmeta { text-align: center; font-size: 12px; color: #a8a29e; margin: 0 0 14px; }
 
+  /* Which group a swipe or an add drops into */
+  .addto { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+  .addto .al { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #a8a29e; flex: 0 0 auto; }
+  .seg { display: flex; gap: 4px; background: #e7e5e4; border-radius: 10px; padding: 3px; flex: 1; min-width: 0; }
+  .seg button { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 6px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--mut); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
   /* Tonight */
-  .totals { display: flex; gap: 8px; margin: 0 0 10px; }
-  .tile { flex: 1; border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px; text-align: center; background: var(--faint); }
-  .tile b { display: block; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-  .tile small { font-size: 11px; color: var(--mut); display: block; }
-  .tnum { flex: 0 0 auto; width: 24px; font-size: 13px; font-weight: 700; color: #a8a29e; text-align: center; font-variant-numeric: tabular-nums; }
+  .group { margin-bottom: 16px; }
+  .ghead { display: flex; align-items: baseline; gap: 8px; padding: 0 4px 6px; }
+  .gname { border: 0; background: transparent; padding: 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); cursor: pointer; text-align: left; }
+  .gname:after { content: " ✎"; color: #d6d3d1; }
+  .gsum { margin-left: auto; font-size: 12px; color: #a8a29e; flex: 0 0 auto; }
+  .glist { min-height: 4px; }
+  .dropzone { border: 1px dashed #d6d3d1; border-radius: 14px; padding: 20px 12px; text-align: center; font-size: 13px; color: #a8a29e; background: #fff; }
+  .grip { flex: 0 0 auto; width: 28px; align-self: stretch; display: flex; align-items: center; justify-content: center; color: #d6d3d1; font-size: 16px; cursor: grab; touch-action: none; }
+  .gnum { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--faint); color: #57534e; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .ghost { position: fixed; z-index: 40; pointer-events: none; margin: 0 !important; box-shadow: 0 14px 30px rgba(0,0,0,.20); }
+  .ph { border: 2px dashed var(--accent); background: #f0fdf4; border-radius: 16px; margin-bottom: 10px; }
   .rowbtn { width: 34px; height: 34px; border: 1px solid var(--line); background: #fff; border-radius: 8px; color: #57534e; font-size: 14px; cursor: pointer; flex: 0 0 auto; }
   .rowbtn.x { color: var(--no); border-color: #fecaca; }
   .acts { display: flex; gap: 8px; margin: 14px 0 0; }
@@ -123,12 +136,14 @@
   <main id="view-deck">
     <div class="chips" id="catchips"></div>
     <div class="chips" id="lvchips"></div>
+    <div id="addto-deck"></div>
     <div id="deck" class="deck"></div>
   </main>
 
   <main id="view-all" class="hidden">
     <div class="chips" id="catchips2"></div>
     <div class="chips" id="lvchips2"></div>
+    <div id="addto-all"></div>
     <div id="alllist"></div>
   </main>
 
@@ -258,24 +273,57 @@ const DRILLS = [
     easier:"Friendly feeds, unlimited lives, just keep it flowing.", harder:"Two shuttles in play at once." }
 ];
 
-const PICKKEY = "badminton-drills-tonight-v1";
+const NIGHTKEY = "badminton-drills-tonight-v2";
+const GROUPS = 2;   // two grades of kids, each with their own list
 
-// picked = tonight's shortlist, in the order they were chosen.
-let picked = [];
+// night.items = tonight's shortlist as { k: drill key, g: group index }, held
+// in render order and grouped: everything for group 0, then group 1. A drill
+// belongs to one group only, so the two lists are always distinct.
+let night = { names: ["Grade 1", "Grade 2"], items: [] };
 try {
-  const p = JSON.parse(localStorage.getItem(PICKKEY));
-  if (Array.isArray(p)) picked = p.filter(k => DRILLS.some(d => d.key === k));
+  let n = JSON.parse(localStorage.getItem(NIGHTKEY));
+  if (!n) {
+    // Migrate v1, which was one flat list of keys, into the first group.
+    const old = JSON.parse(localStorage.getItem("badminton-drills-tonight-v1"));
+    if (Array.isArray(old)) n = { items: old.map(k => ({ k, g: 0 })) };
+  }
+  if (n && typeof n === "object") {
+    if (Array.isArray(n.names)) {
+      n.names.slice(0, GROUPS).forEach((s, i) => { if (typeof s === "string" && s.trim()) night.names[i] = s.trim().slice(0, 24); });
+    }
+    if (Array.isArray(n.items)) {
+      const seen = new Set();
+      night.items = n.items
+        .filter(x => x && typeof x === "object" && DRILLS.some(d => d.key === x.k) && !seen.has(x.k) && seen.add(x.k))
+        .map(x => ({ k: x.k, g: Number.isInteger(x.g) && x.g >= 0 && x.g < GROUPS ? x.g : 0 }));
+    }
+  }
 } catch {}
-function persist() { try { localStorage.setItem(PICKKEY, JSON.stringify(picked)); } catch {} }
+normalize();
+
+function persist() { try { localStorage.setItem(NIGHTKEY, JSON.stringify(night)); } catch {} }
+// Keep the array grouped, so array order is render order and a drill moved
+// between groups lands at the end of the one it joins.
+function normalize() {
+  const out = [];
+  for (let g = 0; g < GROUPS; g++) out.push(...night.items.filter(x => x.g === g));
+  night.items = out;
+}
+function inGroup(g) { return night.items.filter(x => x.g === g); }
 
 let catFilter = "all", lvFilter = "all";
 let expanded = null;                 // drill open in the All list
 let expandedNight = null;            // drill open in Tonight
 let deck = { keys: [], pos: 0, history: [] };
 let tab = "deck";
+let addTo = 0;                       // group a swipe or an add drops into
+let drag = null;                     // in-flight row drag
 
 function drill(k) { return DRILLS.find(d => d.key === k); }
-function isPicked(k) { return picked.includes(k); }
+function isPicked(k) { return night.items.some(x => x.k === k); }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
 function toast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
@@ -294,8 +342,20 @@ function setTab(t) {
 }
 
 function labelTabs() {
-  document.getElementById("tab-night").textContent = picked.length ? `Tonight (${picked.length})` : "Tonight";
+  const n = night.items.length;
+  document.getElementById("tab-night").textContent = n ? `Tonight (${n})` : "Tonight";
 }
+
+// The group a Keep or an Add drops into. Shown above the deck and the list so
+// a coach can do one pass per grade.
+function renderAddTo() {
+  const html = `<div class="addto"><span class="al">Adding to</span><div class="seg">${
+    night.names.map((n, i) => `<button class="${addTo===i?"on":""}" onclick="setAddTo(${i})">${esc(n)}</button>`).join("")
+  }</div></div>`;
+  document.getElementById("addto-deck").innerHTML = html;
+  document.getElementById("addto-all").innerHTML = html;
+}
+function setAddTo(i) { addTo = i; renderAddTo(); }
 
 function matches(d) {
   return (catFilter === "all" || d.cat === catFilter) && (lvFilter === "all" || d.lv.includes(lvFilter));
@@ -363,7 +423,7 @@ function renderDeck() {
     el.innerHTML = `<div class="empty">
         <p class="b">${seen ? "That is every drill" : "Nothing matches those filters"}</p>
         <p class="s">${seen
-          ? `You have been through all ${seen}. ${picked.length ? `${picked.length} on tonight's list.` : "Nothing kept yet."}`
+          ? `You have been through all ${seen}. ${night.items.length ? `${night.items.length} on tonight's list.` : "Nothing kept yet."}`
           : "Try a different type or level."}</p>
       </div>
       <div class="deckbtns" style="margin-top:12px">
@@ -385,7 +445,7 @@ function renderDeck() {
     <div class="deckbtns">
       <button class="undo" onclick="undoSwipe()" ${deck.history.length ? "" : "disabled"} aria-label="undo">↩</button>
       <button class="skip" onclick="swipe(-1)">Skip</button>
-      <button class="take" onclick="swipe(1)">Keep it</button>
+      <button class="take" onclick="swipe(1)">Keep for ${esc(night.names[addTo])}</button>
     </div>
     <div class="deckmeta">${deck.pos + 1} of ${deck.keys.length} · swipe right to keep, left to skip</div>`;
   bindDrag();
@@ -430,7 +490,7 @@ function swipe(dir) {
   if (!k) return;
   const card = document.getElementById("card");
   deck.history.push({ pos: deck.pos, key: k, kept: dir > 0 });
-  if (dir > 0 && !isPicked(k)) { picked.push(k); persist(); }
+  if (dir > 0 && !isPicked(k)) { night.items.push({ k, g: addTo }); normalize(); persist(); }
   if (card) {
     const stamp = document.getElementById(dir > 0 ? "stampYes" : "stampNo");
     if (stamp) stamp.style.opacity = 1;
@@ -448,8 +508,8 @@ function undoSwipe() {
   const last = deck.history.pop();
   if (!last) return;
   if (last.kept) {
-    const i = picked.indexOf(last.key);
-    if (i >= 0) { picked.splice(i, 1); persist(); }
+    const i = night.items.findIndex(x => x.k === last.key);
+    if (i >= 0) { night.items.splice(i, 1); persist(); }
   }
   deck.pos = last.pos;
   labelTabs(); renderDeck();
@@ -472,17 +532,27 @@ function renderAll() {
 }
 function toggleAll(k) { expanded = expanded === k ? null : k; renderAll(); }
 function togglePick(k) {
-  const i = picked.indexOf(k);
-  if (i >= 0) { picked.splice(i, 1); toast("Taken off tonight"); }
-  else { picked.push(k); toast("Added to tonight"); }
-  persist(); labelTabs();
+  const i = night.items.findIndex(x => x.k === k);
+  if (i >= 0) { night.items.splice(i, 1); toast("Taken off tonight"); }
+  else { night.items.push({ k, g: addTo }); toast(`Added to ${night.names[addTo]}`); }
+  normalize(); persist(); labelTabs();
   if (tab === "all") renderAll(); else renderNight();
 }
 
 // ---- Tonight ----
+// Two groups, one per grade of kids. Rows carry a drag handle for moving
+// between and within groups, and a number chip that does the same in one tap
+// for anyone who would rather not drag.
+function groupSummary(g) {
+  const items = inGroup(g);
+  if (!items.length) return "empty";
+  const mins = items.reduce((a, x) => a + drill(x.k).min, 0);
+  return `${items.length} drill${items.length===1?"":"s"} · ${mins}m`;
+}
+
 function renderNight() {
   const el = document.getElementById("view-night");
-  if (!picked.length) {
+  if (!night.items.length) {
     el.innerHTML = `<div class="empty">
         <p class="b">Nothing picked yet</p>
         <p class="s">Swipe right on a drill, or add one from the All drills tab.</p>
@@ -492,47 +562,152 @@ function renderNight() {
       </div>`;
     return;
   }
-  const mins = picked.reduce((a, k) => a + drill(k).min, 0);
-  const cats = new Set(picked.map(k => drill(k).cat));
-  el.innerHTML = `
-    <div class="totals">
-      <div class="tile"><b>${picked.length}</b><small>drill${picked.length===1?"":"s"}</small></div>
-      <div class="tile"><b>${mins}m</b><small>of material</small></div>
-      <div class="tile"><b>${cats.size}</b><small>type${cats.size===1?"":"s"} covered</small></div>
-    </div>
-    ${picked.map((k, i) => {
-      const d = drill(k);
-      return `<div class="drill">
-        <div class="dhead" onclick="toggleNight('${k}')">
-          <div class="tnum">${i+1}</div>
-          <div class="n"><b>${d.name}${levelTags(d)}</b><small>${CATS[d.cat]} · about ${d.min} min · tap for details</small></div>
-          ${i > 0 ? `<button class="rowbtn" onclick="event.stopPropagation();movePick(${i},-1)" aria-label="move up">↑</button>` : ""}
-          <button class="rowbtn x" onclick="event.stopPropagation();togglePick('${k}')" aria-label="remove">✕</button>
-        </div>
-        ${expandedNight === k ? drillBody(d) : ""}
-      </div>`;
-    }).join("")}
+  el.innerHTML = night.names.map((name, g) => {
+    const items = inGroup(g);
+    return `<section class="group">
+      <div class="ghead">
+        <button class="gname" onclick="renameGroup(${g})">${esc(name)}</button>
+        <span class="gsum">${groupSummary(g)}</span>
+      </div>
+      <div class="glist" data-g="${g}">${items.length ? items.map((x, i) => {
+        const d = drill(x.k);
+        return `<div class="drill" data-key="${x.k}">
+          <div class="dhead">
+            <div class="grip" aria-label="drag to reorder">⠿</div>
+            <button class="gnum" onclick="swapGroup('${x.k}')" aria-label="move to the other group">${g+1}</button>
+            <div class="n" onclick="toggleNight('${x.k}')"><b>${d.name}${levelTags(d)}</b><small>${CATS[d.cat]} · about ${d.min} min · tap for details</small></div>
+            <button class="rowbtn x" onclick="togglePick('${x.k}')" aria-label="remove">✕</button>
+          </div>
+          ${expandedNight === x.k ? drillBody(d) : ""}
+        </div>`;
+      }).join("") : `<div class="dropzone">Drag a drill here, or tap its number chip</div>`}</div>
+    </section>`;
+  }).join("") + `
     <div class="acts">
       <button onclick="copyNight()">Copy the list</button>
       <button class="clear" onclick="clearNight()">Clear all</button>
     </div>`;
 }
 function toggleNight(k) { expandedNight = expandedNight === k ? null : k; renderNight(); }
-function movePick(i, dir) {
-  const j = i + dir;
-  if (j < 0 || j >= picked.length) return;
-  [picked[i], picked[j]] = [picked[j], picked[i]];
-  persist(); renderNight();
+
+function renameGroup(g) {
+  const name = prompt("Name for this group", night.names[g]);
+  if (name == null) return;
+  const clean = name.trim().slice(0, 24);
+  if (!clean) return;
+  night.names[g] = clean;
+  persist(); renderAddTo(); renderNight();
 }
+// One tap alternative to dragging: send a drill to the other group, where it
+// joins the end of the list.
+function swapGroup(k) {
+  const i = night.items.findIndex(x => x.k === k);
+  if (i < 0) return;
+  const [it] = night.items.splice(i, 1);
+  it.g = (it.g + 1) % GROUPS;
+  night.items.push(it);
+  normalize(); persist(); renderNight();
+  toast(`Moved to ${night.names[it.g]}`);
+}
+
+// ---- Dragging rows between the two groups ----
+// Pointer events rather than HTML5 drag and drop, because that does not fire
+// on touch. The dragged row leaves the DOM and a placeholder takes its place,
+// so the drop order can be read straight back off the DOM.
+document.getElementById("view-night").addEventListener("pointerdown", e => {
+  const grip = e.target.closest(".grip");
+  if (!grip || drag) return;
+  const row = grip.closest(".drill");
+  if (!row) return;
+  e.preventDefault();
+  const rect = row.getBoundingClientRect();
+  const ghost = row.cloneNode(true);
+  ghost.classList.add("ghost");
+  ghost.style.width = rect.width + "px";
+  ghost.style.left = rect.left + "px";
+  ghost.style.top = rect.top + "px";
+  const ph = document.createElement("div");
+  ph.className = "ph";
+  ph.style.height = rect.height + "px";
+  row.parentNode.insertBefore(ph, row);
+  row.remove();
+  document.body.appendChild(ghost);
+  document.body.classList.add("dragging");
+  drag = { key: row.dataset.key, ghost, ph, grabY: e.clientY - rect.top, y: e.clientY };
+  drag.scroll = setInterval(() => {
+    const margin = 90;
+    const dy = drag.y < margin ? -12 : drag.y > window.innerHeight - margin ? 12 : 0;
+    if (!dy) return;
+    window.scrollBy(0, dy);
+    updateDropTarget(drag.y);
+  }, 16);
+  try { grip.setPointerCapture(e.pointerId); } catch {}
+});
+
+function updateDropTarget(y) {
+  const lists = Array.from(document.querySelectorAll(".glist"));
+  if (!lists.length) return;
+  // Nearest list vertically, so a drop just past the end of one still lands.
+  let target = lists[0], best = Infinity;
+  for (const l of lists) {
+    const r = l.getBoundingClientRect();
+    const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    if (d < best) { best = d; target = l; }
+  }
+  const rows = Array.from(target.children).filter(c => c.classList.contains("drill"));
+  let before = target.querySelector(".dropzone");
+  for (const r of rows) {
+    const rect = r.getBoundingClientRect();
+    if (y < rect.top + rect.height / 2) { before = r; break; }
+  }
+  target.insertBefore(drag.ph, before);
+}
+
+document.addEventListener("pointermove", e => {
+  if (!drag) return;
+  drag.y = e.clientY;
+  drag.ghost.style.top = (e.clientY - drag.grabY) + "px";
+  updateDropTarget(e.clientY);
+});
+
+function endDrag() {
+  if (!drag) return;
+  clearInterval(drag.scroll);
+  // Read the new order back off the DOM: the placeholder marks where the
+  // dragged row landed, and its list gives the group.
+  const items = [];
+  document.querySelectorAll(".glist").forEach(l => {
+    const g = Number(l.dataset.g);
+    Array.from(l.children).forEach(c => {
+      if (c === drag.ph) items.push({ k: drag.key, g });
+      else if (c.dataset && c.dataset.key) items.push({ k: c.dataset.key, g });
+    });
+  });
+  const moved = items.find(x => x.k === drag.key);
+  const before = night.items.find(x => x.k === drag.key);
+  night.items = items;
+  drag.ghost.remove();
+  document.body.classList.remove("dragging");
+  drag = null;
+  normalize(); persist(); renderNight();
+  if (moved && before && moved.g !== before.g) toast(`Moved to ${night.names[moved.g]}`);
+}
+document.addEventListener("pointerup", endDrag);
+document.addEventListener("pointercancel", endDrag);
+
 function clearNight() {
   if (!confirm("Clear tonight's list?")) return;
-  picked = []; persist(); labelTabs(); renderNight();
+  night.items = []; persist(); labelTabs(); renderNight();
 }
 function copyNight() {
-  const txt = "Tonight's drills\n" + picked.map((k, i) => {
-    const d = drill(k);
-    return `${i+1}. ${d.name} (${CATS[d.cat]}, about ${d.min} min)`;
-  }).join("\n");
+  const txt = "Tonight's drills\n" + night.names.map((name, g) => {
+    const items = inGroup(g);
+    if (!items.length) return "";
+    return `\n${name}\n` + items.map((x, i) => {
+      const d = drill(x.k);
+      return `${i+1}. ${d.name} (${CATS[d.cat]}, about ${d.min} min)`;
+    }).join("\n");
+  }).filter(Boolean).join("\n");
   const done = () => toast("Copied");
   try {
     navigator.clipboard.writeText(txt).then(done, () => fallbackCopy(txt, done));
@@ -553,6 +728,7 @@ function fallbackCopy(txt, done) {
 try { if (localStorage.getItem("badminton-hub-v1")) document.getElementById("backlink").classList.remove("hidden"); } catch {}
 
 renderChips();
+renderAddTo();
 buildDeck();
 labelTabs();
 setTab("deck");

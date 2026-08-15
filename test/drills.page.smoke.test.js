@@ -117,9 +117,14 @@ describe("drill deck, opened fresh", { skip: browser ? false : "no Chrome-like b
   });
 
   test("offers keep, skip and a disabled undo", () => {
-    assert.match(dom, /Keep it<\/button>/);
+    assert.match(dom, /Keep for Grade 1<\/button>/);
     assert.match(dom, />Skip<\/button>/);
     assert.match(dom, /class="undo"[^>]*disabled/);
+  });
+
+  test("names the grade a keep will drop into", () => {
+    assert.match(dom, /class="al">Adding to<\/span>/);
+    assert.match(dom, /class="on"[^>]*onclick="setAddTo\(0\)">Grade 1</);
   });
 
   test("carries no warm-up or warm-down drills, they live in Session Coach", () => {
@@ -174,10 +179,21 @@ describe("drill deck, undoing a keep", { skip: browser ? false : "no Chrome-like
   });
 });
 
-describe("tonight's list, three drills kept", { skip: browser ? false : "no Chrome-like browser found" }, () => {
-  // A footwork drill, a net drill and a game: 8 + 6 + 10 minutes, 3 types.
-  const seed = `picked = ["corners", "netkill", "kotc"]; persist(); labelTabs(); setTab("night");`;
-  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+// Tonight's list holds { k: drill key, g: group index } and is grouped in
+// array order, so seeds set it directly and repaint.
+const seedNight = (...items) =>
+  `night.items = ${JSON.stringify(items)}; normalize(); persist(); labelTabs(); setTab("night");`;
+
+describe("tonight's list, split across two grades", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  // Grade 1: a footwork drill and a net drill, 8 + 6 minutes.
+  // Grade 2: one game, 10 minutes.
+  const dom = browser ? withoutScripts(renderPage(browser,
+    seedNight({ k: "corners", g: 0 }, { k: "netkill", g: 0 }, { k: "kotc", g: 1 }))) : "";
+
+  test("shows both grades, named", () => {
+    assert.match(dom, /class="gname"[^>]*>Grade 1</);
+    assert.match(dom, /class="gname"[^>]*>Grade 2</);
+  });
 
   test("lists every drill kept, not just one", () => {
     assert.match(dom, /Six-corner shadow/);
@@ -185,19 +201,130 @@ describe("tonight's list, three drills kept", { skip: browser ? false : "no Chro
     assert.match(dom, /King of the court 2v2/);
   });
 
-  test("totals the material so the night can be sized up", () => {
-    assert.match(dom, /<b>3<\/b><small>drills<\/small>/);
-    assert.match(dom, /<b>24m<\/b><small>of material<\/small>/);
-    assert.match(dom, /<b>3<\/b><small>types covered<\/small>/);
+  test("totals each grade separately, so the two nights can be balanced", () => {
+    assert.match(dom, /<span class="gsum">2 drills · 14m<\/span>/);
+    assert.match(dom, /<span class="gsum">1 drill · 10m<\/span>/);
   });
 
-  test("counts them on the tab", () => {
+  test("puts each drill under the grade it belongs to", () => {
+    const g1 = dom.slice(dom.indexOf('data-g="0"'), dom.indexOf('data-g="1"'));
+    assert.match(g1, /Six-corner shadow/);
+    assert.match(g1, /Net-kill reaction/);
+    assert.doesNotMatch(g1, /King of the court/);
+  });
+
+  test("gives every row a drag handle and a group chip", () => {
+    assert.match(dom, /class="grip"/);
+    assert.match(dom, /class="gnum"[^>]*>1<\/button>/);
+    assert.match(dom, /class="gnum"[^>]*>2<\/button>/);
+  });
+
+  test("counts them all on the tab", () => {
     assert.match(dom, /Tonight \(3\)/);
   });
 
   test("offers to copy the list and to clear it", () => {
     assert.match(dom, /Copy the list/);
     assert.match(dom, /Clear all/);
+  });
+});
+
+describe("tonight's list, one grade still empty", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  const dom = browser ? withoutScripts(renderPage(browser, seedNight({ k: "corners", g: 0 }))) : "";
+
+  test("offers the empty grade as somewhere to drop", () => {
+    assert.match(dom, /Drag a drill here, or tap its number chip/);
+    assert.match(dom, /<span class="gsum">empty<\/span>/);
+  });
+});
+
+describe("tonight's list, moving a drill between grades", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  const seed = `${seedNight({ k: "corners", g: 0 }, { k: "kotc", g: 1 })} swapGroup("corners");`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("the chip sends it across, and it joins the end of the other grade", () => {
+    const g2 = dom.slice(dom.indexOf('data-g="1"'));
+    assert.ok(g2.indexOf("King of the court") < g2.indexOf("Six-corner shadow"),
+      "the moved drill should land after the drill already there");
+    assert.match(dom, /<span class="gsum">empty<\/span>/);
+    assert.match(dom, /<span class="gsum">2 drills · 18m<\/span>/);
+  });
+});
+
+/*
+ * Drag a row by its grip into another group's list and drop it.
+ *
+ * The grabbed row leaves the DOM on pointerdown, so the target list moves up
+ * the page: its rectangle is measured after the grab, not before, exactly as
+ * a finger would find it.
+ */
+const dragInto = (key, targetGroup, where) => `
+  const grip = document.querySelector('[data-key="${key}"] .grip');
+  const from = grip.getBoundingClientRect();
+  grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: from.left + 5, clientY: from.top + 5 }));
+  const to = document.querySelector('.glist[data-g="${targetGroup}"]').getBoundingClientRect();
+  const y = ${where === "top" ? "to.top + 4" : "to.bottom - 4"};
+  document.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: from.left + 5, clientY: y }));
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, clientX: from.left + 5, clientY: y }));
+`;
+
+describe("tonight's list, dragging a drill to the end of the other grade", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  const seed = `${seedNight({ k: "corners", g: 0 }, { k: "kotc", g: 1 })} ${dragInto("corners", 1, "bottom")}`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("lands in the grade it was dropped on, after the drill already there", () => {
+    const g2 = dom.slice(dom.indexOf('data-g="1"'));
+    assert.match(g2, /Six-corner shadow/);
+    assert.ok(g2.indexOf("King of the court") < g2.indexOf("Six-corner shadow"),
+      "dropping at the bottom should put it last");
+  });
+
+  test("leaves the grade it came from", () => {
+    const g1 = dom.slice(dom.indexOf('data-g="0"'), dom.indexOf('data-g="1"'));
+    assert.doesNotMatch(g1, /Six-corner shadow/);
+    assert.match(g1, /Drag a drill here/);
+  });
+
+  test("retotals both grades", () => {
+    assert.match(dom, /<span class="gsum">empty<\/span>/);
+    assert.match(dom, /<span class="gsum">2 drills · 18m<\/span>/);
+  });
+
+  test("clears the ghost row away once dropped", () => {
+    assert.doesNotMatch(dom, /class="drill ghost"/);
+    assert.doesNotMatch(dom, /class="ph"/);
+  });
+});
+
+describe("tonight's list, dragging above a drill", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  const seed = `${seedNight({ k: "corners", g: 0 }, { k: "kotc", g: 1 })} ${dragInto("corners", 1, "top")}`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("drops in above it, so order within a grade is the coach's own", () => {
+    const g2 = dom.slice(dom.indexOf('data-g="1"'));
+    assert.ok(g2.indexOf("Six-corner shadow") < g2.indexOf("King of the court"),
+      "dropping at the top should put it first");
+  });
+});
+
+describe("tonight's list, dragging into an empty grade", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  const seed = `${seedNight({ k: "corners", g: 0 })} ${dragInto("corners", 1, "top")}`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("the empty drop zone accepts it", () => {
+    const g2 = dom.slice(dom.indexOf('data-g="1"'));
+    assert.match(g2, /Six-corner shadow/);
+    assert.match(dom, /<span class="gsum">1 drill · 8m<\/span>/);
+  });
+});
+
+describe("tonight's list, renamed grades", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  const seed = `night.names = ["Tuesday juniors", "Thursday seniors"]; ${seedNight({ k: "corners", g: 0 })}`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("uses the coach's own names", () => {
+    assert.match(dom, /class="gname"[^>]*>Tuesday juniors</);
+    assert.match(dom, /class="gname"[^>]*>Thursday seniors</);
   });
 });
 
@@ -210,11 +337,32 @@ describe("drill deck, filtered to one type", { skip: browser ? false : "no Chrom
 });
 
 describe("drill deck, a drill already kept", { skip: browser ? false : "no Chrome-like browser found" }, () => {
-  const seed = `picked = ["corners"]; ${stackDeck("corners", "fan")}`;
+  const seed = `night.items = [{ k: "corners", g: 0 }]; ${stackDeck("corners", "fan")}`;
   const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
 
   test("is stepped over rather than dealt again", () => {
     assert.match(dom, /Shuttle fan runs/);
     assert.doesNotMatch(dom, /class="drill swipecard"[\s\S]*?Six-corner shadow/);
+  });
+
+  test("stays out of the deck whichever grade it was kept for", () => {
+    const other = `night.items = [{ k: "corners", g: 1 }]; ${stackDeck("corners", "fan")}`;
+    const dom2 = withoutScripts(renderPage(browser, other));
+    assert.match(dom2, /Shuttle fan runs/);
+  });
+});
+
+describe("drill deck, keeping for the second grade", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  const seed = `setAddTo(1); ${stackDeck("corners", "fan")} swipe(1); setTab("night");`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("drops the drill into the grade being added to", () => {
+    const g2 = dom.slice(dom.indexOf('data-g="1"'));
+    assert.match(g2, /Six-corner shadow/);
+  });
+
+  test("leaves the first grade empty", () => {
+    const g1 = dom.slice(dom.indexOf('data-g="0"'), dom.indexOf('data-g="1"'));
+    assert.match(g1, /Drag a drill here/);
   });
 });
