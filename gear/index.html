@@ -211,7 +211,6 @@ function showLog(title, type, v) {
   for (const el of document.querySelectorAll("#logCard .frow[data-for]")) {
     el.hidden = el.dataset.for !== type;
   }
-  document.getElementById("f-date").setAttribute("max", isoDaysAgo(0));
   setField("f-date", v.date);
   for (const t of TYPES) for (const f of DETAIL_FIELDS[t]) setField("f-" + f, t === type ? v[f] || "" : "");
   setField("f-cost", v.cost);
@@ -300,10 +299,16 @@ function setLife(type, raw) {
 
 function itemRow(r, type) {
   const st = r[type];
-  const stat = st
-    ? VERBS[type] + " " + ageLabel(st.ageDays) +
-      ' · <span class="' + (st.due ? "due" : "ok") + '">' + leftLabel(st.leftDays) + "</span>"
-    : '<span class="none">' + (type === "strings" ? "No restrings yet" : "No regrips yet") + "</span>";
+  let stat;
+  if (!st) {
+    stat = '<span class="none">' + (type === "strings" ? "No restrings yet" : "No regrips yet") + "</span>";
+  } else if (st.startsInDays) {
+    stat = "New " + (type === "strings" ? "strings" : "grip") + " from " + formatDate(st.event.date) +
+      ' · <span class="ok">starts in ' + days(st.startsInDays) + "</span>";
+  } else {
+    stat = VERBS[type] + " " + ageLabel(st.ageDays) +
+      ' · <span class="' + (st.due ? "due" : "ok") + '">' + leftLabel(st.leftDays) + "</span>";
+  }
   return `
     <div class="item">
       <div class="itop">
@@ -317,7 +322,9 @@ function itemRow(r, type) {
 
 function histRow(h) {
   const e = h.event;
-  const dur = h.current ? "in use · " + days(h.soFarDays) + " so far" : "lasted " + days(h.lastedDays);
+  const dur = h.startsInDays ? "starts in " + days(h.startsInDays)
+    : h.current ? "in use · " + days(h.soFarDays) + " so far"
+    : "lasted " + days(h.lastedDays);
   const sub = detailsLine(e);
   return `
     <div class="hrow">

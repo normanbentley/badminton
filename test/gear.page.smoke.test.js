@@ -192,6 +192,10 @@ describe("gear page, logging a restring", { skip: browser ? false : "no Chrome-l
     assert.match(dom, /id="slot-r1-grip"><\/div>/, "the other slots stay empty");
   });
 
+  test("puts no upper limit on the date, so a pickup next week can be logged now", () => {
+    assert.doesNotMatch(dom, /id="f-date"[^>]*max=/);
+  });
+
   test("prefills the previous details but never the note", () => {
     assert.match(dom, /id="f-string"[^>]*value="BG65"/);
     assert.match(dom, /id="f-tension"[^>]*value="24 lbs"/);
@@ -239,6 +243,28 @@ describe("gear page, editing a logged restring", { skip: browser ? false : "no C
     assert.match(dom, /Restrung 13 days ago/);
     assert.doesNotMatch(dom, /lasted/, "a second event would show a lasted interval");
     assert.match(dom, /felt dead early/);
+  });
+});
+
+describe("gear page, a restring waiting for pickup", { skip: browser ? false : "no Chrome-like browser found" }, () => {
+  // Paid for already, dated at pickup day next week. Until then the headline
+  // must not claim the racket was restrung today.
+  const seed = `
+    S = sanitizeState({ rackets: S.rackets, life: S.life, events: [
+      { racketId: "r1", type: "strings", date: isoDaysAgo(13), string: "BG65" },
+      { racketId: "r1", type: "strings", date: isoDaysAgo(-7), string: "BG80" }
+    ]});
+    render();`;
+  const dom = browser ? withoutScripts(renderPage(browser, seed)) : "";
+
+  test("shows the waiting set as starting on pickup day, not as restrung today", () => {
+    assert.match(dom, /New strings from/);
+    assert.match(dom, /starts in 7 days/);
+    assert.doesNotMatch(dom, /Restrung today/);
+  });
+
+  test("the old strings run until the swap on pickup day", () => {
+    assert.match(dom, /lasted 20 days/);
   });
 });
 

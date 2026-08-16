@@ -241,6 +241,7 @@ describe("status", () => {
     assert.equal(st.ageDays, 13);
     assert.equal(st.leftDays, 15);
     assert.equal(st.due, false);
+    assert.equal(st.startsInDays, null, "a set already in play is not waiting to start");
   });
 
   test("the day age reaches the expected life is due, not one day later", () => {
@@ -271,10 +272,14 @@ describe("status", () => {
     assert.equal(st.event.string, "second");
   });
 
-  test("a future-dated event counts as age zero, not negative", () => {
-    const st = status(state([restring(-3)]), "r1", "strings", TODAY);
-    assert.equal(st.ageDays, 0);
+  test("a restring waiting for pickup starts its clock on that day", () => {
+    // Paid for yesterday, picked up next week: the event is dated ahead so
+    // the rotation starts then, not when it was logged.
+    const st = status(state([restring(-7)]), "r1", "strings", TODAY);
+    assert.equal(st.startsInDays, 7);
+    assert.equal(st.ageDays, 0, "no age until the clock starts");
     assert.equal(st.leftDays, 28);
+    assert.equal(st.due, false);
   });
 
   test("another racket's restrings do not count", () => {
@@ -313,6 +318,15 @@ describe("history", () => {
     assert.equal(current.current, true);
     assert.equal(current.lastedDays, null);
     assert.equal(current.soFarDays, 13);
+  });
+
+  test("a set waiting for pickup counts down, and ends the old set's run on that day", () => {
+    const h = history(state([restring(13), restring(-7)]), "r1", TODAY);
+    const waiting = h[0];
+    assert.equal(waiting.startsInDays, 7);
+    assert.equal(waiting.soFarDays, 0);
+    const replaced = h[1];
+    assert.equal(replaced.lastedDays, 20, "the old strings run until the swap on pickup day");
   });
 
   test("a regrip in between does not split a string interval", () => {

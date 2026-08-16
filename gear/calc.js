@@ -143,16 +143,24 @@ function eventsFor(events, racketId, type) {
 /*
  * The headline for one item on one racket: how old the current strings or
  * grip are, and how that compares with how long they are expected to last.
- * Null when nothing has been logged yet. A future-dated event counts as age
- * zero rather than a negative age.
+ * Null when nothing has been logged yet. A future-dated event is one waiting
+ * to enter play, like a restring sitting at the shop until pickup day: it
+ * carries startsInDays and counts as age zero until that day arrives.
  */
 function status(state, racketId, type, todayISO) {
   const list = eventsFor(state.events, racketId, type);
   if (!list.length) return null;
   const event = list[list.length - 1];
-  const ageDays = Math.max(0, daysBetween(event.date, todayISO));
+  const rawAge = daysBetween(event.date, todayISO);
+  const ageDays = Math.max(0, rawAge);
   const leftDays = state.life[type] - ageDays;
-  return { event, ageDays, leftDays, due: leftDays <= 0 };
+  return {
+    event,
+    ageDays,
+    leftDays,
+    due: leftDays <= 0,
+    startsInDays: rawAge < 0 ? -rawAge : null
+  };
 }
 
 /*
@@ -167,12 +175,14 @@ function history(state, racketId, todayISO) {
     const list = eventsFor(state.events, racketId, type);
     list.forEach((event, i) => {
       const current = i === list.length - 1;
+      const rawSoFar = current ? daysBetween(event.date, todayISO) : null;
       out.push({
         event,
         type,
         current,
         lastedDays: current ? null : daysBetween(event.date, list[i + 1].date),
-        soFarDays: current ? Math.max(0, daysBetween(event.date, todayISO)) : null
+        soFarDays: current ? Math.max(0, rawSoFar) : null,
+        startsInDays: current && rawSoFar < 0 ? -rawSoFar : null
       });
     });
   }
