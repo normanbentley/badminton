@@ -17,7 +17,7 @@
   }
   function capacity(n, config) {
     const { courts, duration, game, change } = config;
-    if (!integer(n, 4, 60) || ![2, 3].includes(courts) || !integer(duration, 5, 480) || !integer(game, 1, 60) || !integer(change, 0, 15)) throw Error('Use 5–480 minutes total, 1–60 minutes per game and 0–15 minutes changeover.');
+    if (!integer(n, 4, 60) || !integer(courts, 1, 5) || !integer(duration, 5, 480) || !integer(game, 1, 60) || !integer(change, 0, 15)) throw Error('Use 1–5 courts, 5–480 minutes total, 1–60 minutes per game and 0–15 minutes changeover.');
     const usableCourts = Math.min(courts, Math.floor(n / 4));
     const maxRounds = Math.floor((duration + change) / (game + change));
     let games = Math.min(maxRounds, Math.floor(maxRounds * usableCourts * 4 / n));
@@ -29,6 +29,14 @@
   }
   function random(seed) {
     return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  }
+  function courtNumbers(text, count) {
+    if (!integer(count, 1, 5)) throw Error('Choose between 1 and 5 courts.');
+    if (!text.trim()) return Array.from({ length: count }, (_, i) => i + 1);
+    const parts = text.trim().split(/[\s,]+/);
+    const numbers = parts.map(Number);
+    if (parts.length !== count || parts.some(p => !/^\d{1,3}$/.test(p)) || numbers.some(n => !integer(n, 1, 999)) || new Set(numbers).size !== count) throw Error(`Enter ${count} different court number${count === 1 ? '' : 's'} from 1 to 999, separated by commas.`);
+    return numbers;
   }
   function shuffle(a, rng) {
     a = a.slice();
@@ -90,6 +98,10 @@
     const parsed = parsePlayers(s.players.map(p => p.name + (p.grade ? ',' + p.grade : '')).join('\n'));
     if (s.players.some((p, i) => p.id !== i || p.skill !== parsed[i].skill)) throw Error('Invalid saved players.');
     const plan = capacity(s.players.length, s.config);
+    if (s.config.courtNumbers !== undefined) {
+      if (!Array.isArray(s.config.courtNumbers) || s.config.courtNumbers.length !== s.config.courts || s.config.courtNumbers.some(n => !integer(n, 1, 999))) throw Error('Invalid saved court numbers.');
+      courtNumbers(s.config.courtNumbers.join(','), s.config.courts);
+    }
     if (!plan.games || s.rounds.length !== plan.rounds || !integer(s.current, 0, plan.rounds)) throw Error('Invalid saved schedule.');
     const counts = s.players.map(() => 0);
     s.rounds.forEach((r, ri) => {
@@ -122,7 +134,7 @@
     const deadline = s.startedAt ? s.startedAt + s.config.duration * 60000 : null;
     return { finish, deadline, overrun: deadline ? Math.max(0, finish - deadline) : 0 };
   }
-  const api = { parsePlayers, capacity, schedule, standings, validScore, validate, finishEstimate };
+  const api = { parsePlayers, capacity, schedule, standings, validScore, validate, finishEstimate, courtNumbers };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.JuniorTournament = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

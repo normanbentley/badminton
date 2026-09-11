@@ -11,7 +11,7 @@ test('numeric grades support half points, with neutral defaults and unambiguous 
 });
 
 test('capacity finds the maximum feasible equal game count across group sizes and budgets', () => {
-  for (let n = 4; n <= 60; n++) for (const courts of [2, 3]) for (const duration of [5, 30, 90, 180]) for (const game of [3, 8, 15]) for (const change of [0, 2]) {
+  for (let n = 4; n <= 60; n++) for (const courts of [1, 2, 3, 4, 5]) for (const duration of [5, 30, 90, 180]) for (const game of [3, 8, 15]) for (const change of [0, 2]) {
     const config = { courts, duration, game, change }, p = E.capacity(n, config);
     assert.ok(p.minutes <= duration);
     let expected = 0;
@@ -25,8 +25,8 @@ test('capacity finds the maximum feasible equal game count across group sizes an
 });
 
 test('schedules guarantee equal games, bounded duration and no double bookings for 4 to 60 players', () => {
-  for (let n = 4; n <= 60; n++) for (const courts of [2, 3]) {
-    const players = roster(n), config = { courts, duration: 240, game: 6, change: 1 };
+  for (let n = 4; n <= 60; n++) for (const courts of [1, 2, 3, 4, 5]) {
+    const players = roster(n), config = { courts, duration: 480, game: 6, change: 1 };
     const result = E.schedule(players, config, n * 13);
     const counts = Array(n).fill(0);
     for (const round of result.rounds) {
@@ -37,7 +37,7 @@ test('schedules guarantee equal games, bounded duration and no double bookings f
       active.forEach(id => counts[id]++);
       assert.ok(Math.max(...counts) - Math.min(...counts) <= 1);
     }
-    assert.ok(counts.every(c => c === result.plan.games));
+    assert.ok(result.plan.games > 0); assert.ok(counts.every(c => c > 0 && c === result.plan.games));
     assert.ok(result.plan.minutes <= config.duration);
     assert.doesNotThrow(() => E.validate({ version: 1, players, config, ...result, current: 0, timer: null }));
   }
@@ -76,4 +76,42 @@ test('restoring rejects corrupt scores, schedules and timers', () => {
     t => { t.timer = { remaining: -2, end: null }; },
     t => { t.rounds.pop(); }
   ]) { const copy = JSON.parse(JSON.stringify(s)); mutate(copy); assert.throws(() => E.validate(copy)); }
+});
+
+test('court numbers accept a custom order and reject missing, duplicate or invalid courts', () => {
+  assert.deepEqual(E.courtNumbers('', 5), [1, 2, 3, 4, 5]);
+  assert.deepEqual(E.courtNumbers('3, 4, 5', 3), [3, 4, 5]);
+  assert.deepEqual(E.courtNumbers('12 3 8', 3), [12, 3, 8]);
+  assert.deepEqual(E.courtNumbers('7', 1), [7]);
+  for (const input of ['3,3,5', '3,03,5', '3,4', '3,4,5,6', '0,4,5', '3.5,4,5', 'A,4,5', '1000,4,5']) assert.throws(() => E.courtNumbers(input, 3));
+  for (const count of [0, 6, 1.5]) assert.throws(() => E.courtNumbers('', count));
+});
+
+test('backup validation preserves custom court numbers and accepts old backups', () => {
+  const players = roster(12), config = { courts: 3, duration: 30, game: 5, change: 1, courtNumbers: [3, 4, 5] };
+  const s = { version: 1, players, config, ...E.schedule(players, config), current: 0, timer: null };
+  assert.deepEqual(E.validate(structuredClone(s)).config.courtNumbers, [3, 4, 5]);
+  for (const numbers of [[], [3, 4], [3, 3, 5], [3, 4, '5'], [3, 4, -1]]) {
+    const copy = structuredClone(s); copy.config.courtNumbers = numbers;
+    assert.throws(() => E.validate(copy));
+  }
+  delete s.config.courtNumbers; assert.doesNotThrow(() => E.validate(s));
+});
+
+test('short budgets either give every player equal games or refuse to generate a tournament', () => {
+  for (let n = 4; n <= 60; n++) for (let courts = 1; courts <= 5; courts++) {
+    const players = roster(n), config = { courts, duration: 15, game: 5, change: 1 };
+    const plan = E.capacity(n, config);
+    if (!plan.games) { assert.throws(() => E.schedule(players, config), /Not enough time/); continue; }
+    for (const seed of [1, 97, 2026]) {
+      const { rounds } = E.schedule(players, config, seed), counts = Array(n).fill(0);
+      rounds.forEach(r => {
+        const active = r.matches.flatMap(m => m.teams.flat());
+        assert.equal(new Set(active).size, active.length);
+        active.forEach(id => counts[id]++);
+      });
+      assert.ok(counts.every(c => c > 0 && c === plan.games), `Everyone plays: ${n} players, ${courts} courts, seed ${seed}`);
+      assert.ok(rounds.length * config.game + (rounds.length - 1) * config.change <= config.duration);
+    }
+  }
 });

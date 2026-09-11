@@ -24,7 +24,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
       // Simulate an existing v1 offline installation. The visible marker lets
       // the upgrade check prove that the old cached document was replaced.
-      if (serveLegacyCache && pathname.endsWith('/sw.js')) data = String(data).replace("'junior-doubles-v4'", "'junior-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
+      if (serveLegacyCache && pathname.endsWith('/sw.js')) data = String(data).replace("'junior-doubles-v5'", "'junior-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
       if (serveLegacyCache && path.extname(file) === '.html') data = String(data).replace('<body>', '<body><div id="legacy-cache-marker" hidden>Previous cached version</div>');
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
     });
@@ -107,24 +107,39 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
   });
 
   await t.test('setup reacts immediately to numeric grades and changing game length', async () => {
+    assert.deepEqual(await js(`Array.from(document.querySelectorAll('#courts option')).map(el => el.value)`), ['1', '2', '3', '4', '5']);
+    await cdp('Emulation.setDeviceMetricsOverride', { ...viewport, width: 360, height: 800 });
+    assert.equal(await js(`document.getElementById('game').getBoundingClientRect().top === document.getElementById('change').getBoundingClientRect().top`), true);
+    assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    const setupScreenshot = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+    fs.writeFileSync(path.join(os.tmpdir(), 'junior-doubles-setup.png'), Buffer.from(setupScreenshot.data, 'base64'));
+    await cdp('Emulation.setDeviceMetricsOverride', viewport);
     await fill('#names', 'Alex, 3.5\nSam, 5\nCharlie, 1\nHarper\nJamie, 2.5\nTaylor, 4\nRiley, 2\nJordan, 4.5');
     await fill('#duration', 17); await fill('#game', 5); await fill('#change', 1);
     assert.match(await js(`document.getElementById('preview').textContent`), /3 games each/);
     await fill('#game', 8);
     assert.match(await js(`document.getElementById('preview').textContent`), /2 games each/);
-    await fill('#game', 5); await click('#create');
+    await fill('#game', 5);
+    await fill('#court-numbers', '3,3'); await click('#create');
+    assert.match(await js(`document.getElementById('setup-error').textContent`), /different court numbers/);
+    await fill('#court-numbers', '3,5'); await click('#create');
     await until(`!!document.getElementById('court-0-0')`);
     assert.equal((await saved()).players[0].skill, 3.5);
     assert.equal((await saved()).players.find(p => p.name === 'Harper').skill, 3);
     assert.equal(await js(`document.querySelectorAll('[data-score]').length`), 4);
     assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    assert.deepEqual(await js(`Array.from(document.querySelectorAll('.court-head .court-number')).map(el => el.textContent)`), ['COURT 3', 'COURT 5']);
+    assert.deepEqual((await saved()).config.courtNumbers, [3, 5]);
+    assert.match(await js(`document.getElementById('finish-time').textContent`), /\d{1,2}:\d{2}\s*(am|pm)/i);
+    assert.equal(await js(`document.querySelector('#tournament-options > summary').textContent.trim()`), '');
+    assert.equal(await js(`Array.from(document.querySelectorAll('.court-card .pair-row')).every(row => { const name = row.querySelector('.team').getBoundingClientRect(), score = row.querySelector('input').getBoundingClientRect(); return score.left >= name.right && Math.abs((name.top + name.bottom) / 2 - (score.top + score.bottom) / 2) < 2; })`), true);
     const screenshot = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
     fs.writeFileSync(path.join(os.tmpdir(), 'junior-doubles-round.png'), Buffer.from(screenshot.data, 'base64'));
   });
   await t.test('round grades are small and the alphabetical player list opens empty match histories', async () => {
-    assert.equal(await js(`document.querySelectorAll('.team .player-grade').length`), 8);
-    assert.equal(await js(`Array.from(document.querySelectorAll('.team .player-label')).find(el => el.querySelector('.player-name').textContent === 'Alex').querySelector('.player-grade').textContent`), '3.5');
-    assert.equal(await js(`Array.from(document.querySelectorAll('.team .player-label')).find(el => el.querySelector('.player-name').textContent === 'Harper').querySelector('.player-grade').textContent`), '3*');
+    assert.equal(await js(`document.querySelectorAll('.court-card .team .player-grade').length`), 8);
+    assert.equal(await js(`Array.from(document.querySelectorAll('.court-card .team .player-label')).find(el => el.querySelector('.player-name').textContent === 'Alex').querySelector('.player-grade').textContent`), '3.5');
+    assert.equal(await js(`Array.from(document.querySelectorAll('.court-card .team .player-label')).find(el => el.querySelector('.player-name').textContent === 'Harper').querySelector('.player-grade').textContent`), '3*');
     assert.ok(await js(`parseFloat(getComputedStyle(document.querySelector('.player-grade')).fontSize) < parseFloat(getComputedStyle(document.querySelector('.team')).fontSize)`));
     await click('[data-tab="players"]');
     assert.deepEqual(await js(`Array.from(document.querySelectorAll('.player-entry summary .player-name')).map(el => el.textContent)`), ['Alex', 'Charlie', 'Harper', 'Jamie', 'Jordan', 'Riley', 'Sam', 'Taylor']);
@@ -154,6 +169,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     await click('.next-round > summary');
     const preview = await js(`document.querySelector('.next-round').textContent`);
     for (const match of original.rounds[1].matches) for (const id of match.teams.flat()) assert.ok(preview.includes(original.players[id].name));
+    assert.deepEqual(await js(`Array.from(document.querySelectorAll('.next-round .court-number')).map(el => el.textContent)`), original.rounds[1].matches.map((_, i) => 'COURT ' + original.config.courtNumbers[i]));
     assert.match(await js(`document.getElementById('finish-time').textContent`), /Estimated finish/);
     const mock = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
       window.wakeRequests = 0; window.wakeReleases = 0; window.buzzes = 0; window.tones = 0;
@@ -220,12 +236,12 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
         const id = match.teams[side][0], partner = match.teams[side][1];
         await click(`[data-player-id="${id}"] > summary`);
         const text = await js(`document.querySelector('[data-player-id="${id}"] .player-matches').textContent`);
-        assert.ok(text.includes(`ROUND 1 · COURT ${court + 1}`));
+        assert.ok(text.includes(`ROUND 1 · COURT ${tournament.config.courtNumbers[court]}`));
         assert.ok(text.includes(tournament.players[partner].name));
         for (const opponent of match.teams[1 - side]) assert.ok(text.includes(tournament.players[opponent].name));
         const [own, other] = [match.score[side], match.score[1 - side]];
         assert.ok(text.includes(own > other ? 'Win' : own < other ? 'Loss' : 'Draw'));
-        assert.ok(text.includes(`${own}–${other}`));
+        assert.deepEqual(await js(`Array.from(document.querySelectorAll('[data-player-id="${id}"] .pair-result')).map(el => Number(el.textContent))`), [own, other]);
         assert.equal(await js(`document.querySelectorAll('[data-player-id="${id}"] .player-match').length`), 1);
       }
     }
@@ -236,7 +252,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     assert.deepEqual((await saved()).rounds[0].matches[0].score, [1, 20]);
     const correctedPlayer = (await saved()).rounds[0].matches[0].teams[0][0];
     await click('[data-tab="players"]'); await click(`[data-player-id="${correctedPlayer}"] > summary`);
-    assert.match(await js(`document.querySelector('[data-player-id="${correctedPlayer}"] .match-outcome').textContent`), /Loss 1–20/);
+    assert.match(await js(`document.querySelector('[data-player-id="${correctedPlayer}"] .match-outcome').textContent`), /Loss/);
     await click('[data-tab="round"]'); await click('[data-action="undo"]'); await click('#confirm [value="yes"]');
     await until(`!!document.getElementById('court-0-0') && document.getElementById('court-0-0').value === '1'`);
     assert.equal((await saved()).current, 0);
@@ -270,6 +286,10 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     await cdp('Page.reload');
     await until(`document.body?.textContent.includes('Everyone played 3 games')`);
     assert.equal((await saved()).current, 3);
+    assert.deepEqual((await saved()).config.courtNumbers, [3, 5]);
+    await click('[data-tab="history"]');
+    assert.equal(await js(`document.querySelector('.history-match .court-number').textContent`), 'COURT 3');
+    assert.deepEqual(await js(`Array.from(document.querySelector('.history-match').querySelectorAll('.pair-result')).map(el => Number(el.textContent))`), (await saved()).rounds[0].matches[0].score);
     assert.deepEqual(errors, []);
   });
   await t.test('a backup restores a completed tournament and invalid imports preserve it', async () => {
@@ -291,33 +311,59 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     await click('#confirm [value="yes"]');
     await until(`document.body?.textContent.includes('Everyone played 3 games')`);
     assert.equal((await saved()).current, 3);
+    assert.deepEqual((await saved()).config.courtNumbers, [3, 5]);
     await importData({ version: 99 });
     await until(`document.getElementById('storage-warning').textContent.includes('Could not import')`);
     assert.equal((await saved()).current, 3);
   });
-  await t.test('Create works for small, odd and large groups on two and three courts', async () => {
+  await t.test('Create works for small, odd and large groups on one to five courts', async () => {
     await cdp('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-    for (const [count, courts] of [[4, 3], [9, 2], [12, 3], [17, 2], [60, 3]]) {
+    for (const [count, courts] of [[4, 1], [9, 2], [12, 3], [17, 4], [60, 5]]) {
       await click('[data-action="new"]'); await click('#confirm [value="yes"]');
       await until(`!!document.getElementById('names')`);
       const list = Array.from({ length: count }, (_, i) => `Player ${i + 1}, ${1 + (i % 9) / 2}`).join('\n');
       await fill('#names', list); await fill('#duration', 240); await fill('#game', 6); await fill('#change', 1);
+      await fill('#court-numbers', '');
       await js(`document.getElementById('courts').focus()`);
-      const key = courts === 3 ? 'End' : 'Home';
-      await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: courts === 3 ? 35 : 36 });
-      await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: courts === 3 ? 35 : 36 });
+      for (const key of ['Home', ...Array(courts - 1).fill('ArrowDown')]) {
+        await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: key === 'Home' ? 36 : 40 });
+        await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: key === 'Home' ? 36 : 40 });
+      }
       assert.equal(await js(`document.getElementById('courts').value`), String(courts));
+      const numbers = [3, 4, 5, 8, 12].slice(0, courts);
+      await fill('#court-numbers', numbers.join(','));
       await click('#create'); await until(`!!document.getElementById('court-0-0')`);
       const tournament = await saved();
       assert.equal(tournament.players.length, count);
       assert.equal(tournament.config.courts, courts);
+      assert.deepEqual(tournament.config.courtNumbers, numbers);
+      assert.deepEqual(await js(`Array.from(document.querySelectorAll('.court-head .court-number')).map(el => el.textContent)`), numbers.slice(0, tournament.rounds[0].matches.length).map(n => 'COURT ' + n));
       const counts = Array(count).fill(0);
       tournament.rounds.forEach(r => r.matches.forEach(m => m.teams.flat().forEach(id => counts[id]++)));
       assert.ok(counts.every(games => games === tournament.plan.games));
       assert.ok(tournament.plan.minutes <= 240);
       assert.equal(await js(`document.querySelectorAll('[data-score]').length`), tournament.rounds[0].matches.length * 2);
       assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+      await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
+      assert.deepEqual((await saved()).config.courtNumbers, numbers);
     }
+  });
+  await t.test('long player names keep their score alongside the pair on a narrow Android screen', async () => {
+    const original = await saved(), fixture = structuredClone(original);
+    const ids = fixture.rounds[0].matches[0].teams.flat();
+    fixture.players[ids[0]].name = 'Alexanderthelongestplayername'.repeat(2).slice(0, 50);
+    fixture.players[ids[1]].name = 'Christopher Montgomery Wellington Smith Junior';
+    await js(`localStorage.setItem('junior-doubles-v1', ${JSON.stringify(JSON.stringify(fixture))})`);
+    await cdp('Emulation.setDeviceMetricsOverride', { ...viewport, width: 360, height: 800 });
+    await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
+    assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    assert.equal(await js(`Array.from(document.querySelectorAll('.court-card .pair-row')).every(row => { const team = row.querySelector('.team').getBoundingClientRect(), input = row.querySelector('input').getBoundingClientRect(); return input.left >= team.right && input.right <= innerWidth; })`), true);
+    await js(`document.querySelector('.court-card').scrollIntoView()`);
+    const screenshot = await cdp('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(path.join(os.tmpdir(), 'junior-doubles-long-names.png'), Buffer.from(screenshot.data, 'base64'));
+    await js(`localStorage.setItem('junior-doubles-v1', ${JSON.stringify(JSON.stringify(original))})`);
+    await cdp('Emulation.setDeviceMetricsOverride', viewport);
+    await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
   });
   await t.test('Create reads the current form even when autofill does not dispatch input events', async () => {
     await click('[data-action="new"]'); await click('#confirm [value="yes"]');
@@ -370,7 +416,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), true);
     serveLegacyCache = false;
     await js(`navigator.serviceWorker.getRegistration().then(r => r.update())`);
-    await until(`(async () => (await caches.has('junior-doubles-v4')) && !(await caches.has('junior-doubles-v1')))()`);
+    await until(`(async () => (await caches.has('junior-doubles-v5')) && !(await caches.has('junior-doubles-v1')))()`);
     await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
     assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), false);
     assert.equal((await saved()).players.length, 4);
