@@ -134,7 +134,16 @@
     const deadline = s.startedAt ? s.startedAt + s.config.duration * 60000 : null;
     return { finish, deadline, overrun: deadline ? Math.max(0, finish - deadline) : 0 };
   }
-  const api = { parsePlayers, capacity, schedule, standings, validScore, validate, finishEstimate, courtNumbers };
+  function archiveTournament(entries, tournament, savedAt, id) {
+    const copy = JSON.parse(JSON.stringify(tournament));
+    if (copy.timer?.end) copy.timer = { remaining: Math.max(0, copy.timer.end - savedAt), end: null };
+    const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value;
+    // Resting lists are derived and can change order when an old backup is validated.
+    const key = t => JSON.stringify(canonical([t.players, t.config, t.rounds.map(r => r.matches), t.current, t.timer, t.drafts || {}, t.startedAt, t.readyAt]));
+    if (entries.some(entry => key(entry.tournament) === key(copy))) return entries;
+    return [{ id, savedAt, tournament: copy }, ...entries];
+  }
+  const api = { parsePlayers, capacity, schedule, standings, validScore, validate, finishEstimate, courtNumbers, archiveTournament };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.JuniorTournament = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

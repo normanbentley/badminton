@@ -4,6 +4,8 @@
   const app = document.getElementById('app');
   const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let state = null, tab = 'round', editing = null, storageBlocked = false;
+  const HISTORY = KEY + '-history';
+  let archive = [], archiveBlocked = false, showingArchive = false;
   let setup = { names: '', courtNumbers: '', courts: 2, duration: 90, game: 8, change: 2 };
   let wakeLock = null, wakePending = false, wakeFailed = false, audioContext = null;
   let keepAwake = true, sound = false;
@@ -66,6 +68,43 @@
     try { const draft = JSON.parse(storedSetup); if (draft && typeof draft.names === 'string') setup = { ...setup, ...draft }; }
     catch { if (!storageBlocked) warning('The saved setup could not be read. Please enter the player list again.'); }
   }
+  try {
+    const raw = localStorage.getItem(HISTORY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw Error('Invalid history');
+      archive = parsed.map(entry => {
+        if (typeof entry.id !== 'string' || !Number.isFinite(entry.savedAt)) throw Error('Invalid history entry');
+        return { id: entry.id, savedAt: entry.savedAt, tournament: E.validate(entry.tournament) };
+      });
+    }
+  } catch { archiveBlocked = true; warning('Tournament history could not be loaded. Your current tournament is still available. Export it before leaving this page.'); }
+  function preserveCurrent() {
+    if (!state) return true;
+    if (archiveBlocked) { warning('History is unavailable. Export the current tournament before switching. Reload after browser storage is available.'); return false; }
+    const next = E.archiveTournament(archive, state, Date.now(), crypto.randomUUID());
+    if (!store(HISTORY, next)) return false;
+    archive = next; return true;
+  }
+  function openTournament(tournament, fromArchive = false) {
+    if (!preserveCurrent()) return;
+    const copy = structuredClone(tournament);
+    // Reopening an old running timer must not consume time while it was archived.
+    if (copy.timer?.end) copy.timer = { remaining: copy.timer.remaining, end: null };
+    if (archiveBlocked) { warning('History is unavailable. The backup has not replaced your current tournament.'); return; }
+    const next = E.archiveTournament(archive, copy, Date.now(), crypto.randomUUID());
+    if (!store(HISTORY, next)) return;
+    archive = next;
+    if (!store(KEY, copy)) return;
+    state = copy; storageBlocked = false; document.getElementById('storage-warning').hidden = true; showingArchive = false; tab = fromArchive && state.current === state.rounds.length ? 'standings' : 'round'; editing = null; render(); window.scrollTo(0, 0);
+  }
+  function archiveView() {
+    const date = stamp => new Date(stamp).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+    app.innerHTML = `<section class="card"><div class="archive-heading"><h2>Tournament history</h2><button data-action="close-archive">Back</button></div><p class="help">Saved on this browser. Each saved copy keeps its results, players and court numbers. Different versions of an imported event are kept separately.</p>${state ? '<button class="primary wide" data-action="close-archive">Return to current tournament</button>' : ''}${archive.length ? archive.map((entry, index) => {
+      const t = entry.tournament, complete = t.current === t.rounds.length;
+      return `<article class="archive-entry"><h3>${esc(t.startedAt ? date(t.startedAt) : 'Imported tournament')}</h3><p class="help">${t.players.length} players · ${complete ? 'Completed' : `${t.current}/${t.rounds.length} rounds completed`} · ${t.plan.games} games each<br>Saved ${esc(date(entry.savedAt))}</p><p class="archive-roster">${esc(t.players.slice(0, 4).map(p => p.name).join(', '))}${t.players.length > 4 ? '…' : ''}</p><div class="actions"><button class="primary" data-open-archive="${index}">${complete ? 'View results' : 'Resume'}</button><button data-export-archive="${index}">Export</button><button class="danger" data-delete-archive="${index}" aria-label="Delete saved tournament from ${esc(date(entry.savedAt))}">Delete</button></div></article>`;
+    }).join('') : '<p class="help archive-empty">No saved tournaments yet. Your current tournament is saved here when you finish it, start a new one or import another.</p>'}</section>`;
+  }
   function store(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); document.getElementById('save-status').textContent = 'Saved on this device only.'; return true; }
     catch { warning('This browser could not save changes. Keep this page open and export a backup before leaving.'); document.getElementById('save-status').textContent = 'Changes are not saved.'; return false; }
@@ -81,7 +120,7 @@
     document.getElementById('confirm-text').textContent = text;
     const confirmButton = dialog.querySelector('[value="yes"]');
     confirmButton.textContent = yes;
-    confirmButton.className = ['Start new', 'Reset data', 'Restore backup'].includes(yes) ? 'primary danger-primary' : 'primary';
+    confirmButton.className = ['Start new', 'Reset data', 'Delete copy'].includes(yes) ? 'primary danger-primary' : 'primary';
     dialog.querySelector('[value="cancel"]').textContent = 'Cancel';
     dialog.onclose = () => { if (dialog.returnValue === 'yes') action(); };
     dialog.showModal();
@@ -98,7 +137,7 @@
       undo: '<path d="M8 4 3 9l5 5M3 9h11a6 6 0 0 1 0 12h-3"/>',
       add: '<path d="M12 5v14M5 12h14"/>'
     }[kind]}</svg>`;
-    return `<details class="options-menu" id="tournament-options"><summary aria-label="Tournament options" title="Tournament options">${icon('more')}</summary><div class="options-panel"><p class="menu-label">Tournament tools</p>${state ? `<button data-action="export">${icon('export')}Export backup</button>` : ''}<button data-action="import">${icon('import')}Import backup</button><input id="import" type="file" accept="application/json,.json" aria-label="Import tournament backup" hidden>${state?.current ? `<div class="menu-divider"></div><button data-action="undo">${icon('undo')}Undo last round</button>` : ''}${state ? `<div class="menu-divider"></div><button class="danger" data-action="new">${icon('add')}New tournament</button>` : ''}${storageBlocked ? `<button data-action="raw">${icon('export')}Download stored data</button><div class="menu-divider"></div><button class="danger" data-action="reset-corrupt">${icon('undo')}Reset saved data</button>` : ''}</div></details>`;
+    return `<details class="options-menu" id="tournament-options"><summary aria-label="Tournament options" title="Tournament options">${icon('more')}</summary><div class="options-panel"><p class="menu-label">Tournament tools</p><button data-action="archive">${icon('undo')}Tournament history</button>${state ? `<button data-action="export">${icon('export')}Export backup</button>` : ''}<button data-action="import">${icon('import')}Import backup</button><input id="import" type="file" accept="application/json,.json" aria-label="Import tournament backup" hidden>${state?.current ? `<div class="menu-divider"></div><button data-action="undo">${icon('undo')}Undo last round</button>` : ''}${state ? `<div class="menu-divider"></div><button class="danger" data-action="new">${icon('add')}New tournament</button>` : ''}${storageBlocked ? `<button data-action="raw">${icon('export')}Download stored data</button><div class="menu-divider"></div><button class="danger" data-action="reset-corrupt">${icon('undo')}Reset saved data</button>` : ''}</div></details>`;
   }
   function setupView() {
     app.innerHTML = `<section class="card"><p class="eyebrow">LET’S GET PLAYING</p><h2>Set up your tournament</h2><label for="names">Who’s playing?</label><p class="help" id="names-help">One player per line. Optional grade: <b>Alex, 3.5</b><br>Grades run from 1 to 5, with 5 strongest. Half points are welcome. Leave the grade blank to use 3.</p><textarea id="names" rows="7" placeholder="Alex, 3.5&#10;Charlie, 2&#10;Harper&#10;Sam, 5" aria-describedby="names-help">${esc(setup.names)}</textarea><div class="grid" style="margin-top:20px"><label>Courts<select id="courts">${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${Number(setup.courts) === n ? 'selected' : ''}>${n} court${n === 1 ? '' : 's'}</option>`).join('')}</select></label><label>Total (min)<input id="duration" type="number" inputmode="numeric" min="5" max="480" value="${esc(setup.duration)}"></label><label>Game (min)<input id="game" type="number" inputmode="numeric" min="1" max="60" value="${esc(setup.game)}"></label><label>Changeover (min)<input id="change" type="number" inputmode="numeric" min="0" max="15" value="${esc(setup.change)}"></label></div><label class="court-numbers-label" for="court-numbers">Court numbers <span class="muted">(optional)</span></label><input id="court-numbers" value="${esc(setup.courtNumbers || '')}" placeholder="e.g. 3, 4, 5" aria-describedby="court-numbers-help"><p id="court-numbers-help" class="help">Leave blank to number courts from 1. Otherwise enter one number per available court.</p><p class="help">Changeover covers scores, a drink and moving courts. Included between rounds.</p><div id="preview" class="preview" aria-live="polite"></div><p id="setup-error" class="error" role="alert" tabindex="-1" hidden></p><button id="create" class="primary wide" data-action="create">Create tournament</button><details><summary>How we keep it fair</summary><p>Every player finishes with exactly the same number of games. Turns rotate so nobody is double booked, and playing counts stay within one game of each other.</p><p>We try to vary partners and opponents and balance combined grades. Repeats can be unavoidable, especially with a small group.</p><p>Win: 2 points. Draw: 1. Loss: 0. Point difference breaks ties; players still tied share their place. All scores are final at the whistle, including draws.</p><p>The planned games and changeovers fit your time budget. Late starts, longer breaks or paused timers can extend the actual event.</p></details></section>`;
@@ -190,6 +229,7 @@
     syncWake();
     document.getElementById('options-slot').innerHTML = utilities();
     document.body.classList.toggle('running', !!state);
+    if (showingArchive) return archiveView();
     if (!state) return setupView();
     app.innerHTML = `<nav class="tabs" aria-label="Tournament views">${[['round', 'Current round'], ['standings', 'Standings'], ['players', 'Players'], ['history', 'Results']].map(([id, label]) => `<button data-tab="${id}" ${tab === id ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>${tab === 'round' ? roundView() : tab === 'standings' ? standingsView() : tab === 'players' ? playersView() : historyView()}`;
     tick();
@@ -205,7 +245,7 @@
     catch (error) { document.getElementById('result-error').textContent = error.message; return; }
     const finish = () => {
       state.rounds[state.current].matches.forEach((m, i) => { m.score = scores[i]; });
-      state.current++; state.timer = null; state.readyAt = Date.now() + state.config.change * 60000; state.drafts = {}; editing = null; save(); render(); window.scrollTo(0, 0);
+      state.current++; state.timer = null; state.readyAt = Date.now() + state.config.change * 60000; state.drafts = {}; editing = null; save(); if (state.current === state.rounds.length) preserveCurrent(); render(); window.scrollTo(0, 0);
     };
     if (state.timer && remaining() > 0) confirmAction('Finish this round early?', 'There is still time on the round timer. Save these as the final scores?', 'Save round', finish);
     else finish();
@@ -239,9 +279,23 @@
     if (menu && !menu.contains(event.target)) menu.open = false;
     const button = event.target.closest('button'); if (!button) return;
     if (menu?.contains(button)) menu.open = false;
+    if (button.dataset.openArchive !== undefined) {
+      const entry = archive[Number(button.dataset.openArchive)];
+      confirmAction('Open saved tournament?', 'Your current tournament will be kept in history. You can view results or continue this saved event. Any saved timer resumes paused.', 'Open tournament', () => openTournament(entry.tournament, true)); return;
+    }
+    if (button.dataset.exportArchive !== undefined) { const entry = archive[Number(button.dataset.exportArchive)]; download(JSON.stringify(entry.tournament, null, 2), 'junior-doubles-' + entry.id + '.json'); return; }
+    if (button.dataset.deleteArchive !== undefined) {
+      const id = archive[Number(button.dataset.deleteArchive)].id;
+      confirmAction('Delete saved copy?', 'This removes only this copy from history. Export it first if you want a backup. Your current tournament is unchanged.', 'Delete copy', () => {
+        const next = archive.filter(entry => entry.id !== id);
+        if (store(HISTORY, next)) { archive = next; render(); }
+      }); return;
+    }
     if (button.dataset.tab) { tab = button.dataset.tab; editing = null; render(); return; }
     if (button.dataset.edit) { editing = button.dataset.edit; render(); document.getElementById('edit-0').focus(); return; }
     switch (button.dataset.action) {
+      case 'archive': if (state) preserveCurrent(); showingArchive = true; render(); window.scrollTo(0, 0); break;
+      case 'close-archive': showingArchive = false; render(); window.scrollTo(0, 0); break;
       case 'create': createTournament(); break;
       case 'timer': {
         prepareAudio(); wakeFailed = false;
@@ -266,9 +320,10 @@
         try { localStorage.removeItem(KEY); localStorage.removeItem(DRAFT); } catch { warning('The browser is blocking access to stored data.'); return; }
         state = null; storageBlocked = false; document.getElementById('storage-warning').hidden = true; render();
       }); break;
-      case 'new': confirmAction('Start a new tournament?', 'This replaces the tournament on this device. Export a backup first if you want to keep it.', 'Start new', () => {
+      case 'new': confirmAction('Start a new tournament?', 'Your current tournament will be kept in Tournament history on this browser.', 'Start new', () => {
+        if (!preserveCurrent()) return;
         try { localStorage.removeItem(KEY); } catch { warning('Could not remove the saved tournament.'); return; }
-        state = null; editing = null; render();
+        state = null; editing = null; showingArchive = false; render();
       }); break;
     }
   });
@@ -286,11 +341,11 @@
     try {
       if (file.size > 2000000) throw Error('Backup is too large. Choose a Junior Doubles JSON backup.');
       const imported = E.validate(JSON.parse(await file.text()));
-      confirmAction('Restore this tournament?', `${imported.players.length} players, ${imported.plan.games} games each. This replaces the tournament currently stored here.`, 'Restore backup', () => { state = imported; storageBlocked = false; document.getElementById('storage-warning').hidden = true; tab = 'round'; editing = null; save(); render(); });
+      confirmAction('Restore this tournament?', `${imported.players.length} players, ${imported.plan.games} games each. Your current tournament will be kept in history. Different saved versions are kept separately.`, 'Restore backup', () => { openTournament(imported); });
     } catch (error) { warning('Could not import backup: ' + error.message); }
     event.target.value = '';
   });
-  window.addEventListener('storage', event => { if (event.key === KEY) warning('This tournament changed in another tab. Reload before entering more results. Use one tab to run the event.'); });
+  window.addEventListener('storage', event => { if (event.key === KEY || event.key === HISTORY) warning('Tournament data changed in another tab. Reload before making changes. Use one tab to run events.'); });
   document.addEventListener('visibilitychange', () => { wakeFailed = false; tick(); });
   render(); setInterval(tick, 500);
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('./sw.js').then(async registration => {

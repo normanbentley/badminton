@@ -65,6 +65,18 @@ devices or replacing a tournament. Import validates the schedule and results.
 Backup import/export and New tournament are in the header's three-dot menu.
 Use one tab/device to operate an event.
 
+Tournament history is also in the three-dot menu. Finishing an event, opening
+history, starting a new event, or restoring another backup saves a copy of the
+current event. Open a copy to view standings or resume play; saved running timers
+are paused so time away does not consume a round. You can export or delete each
+saved copy individually. Deleting a copy does not delete the current tournament.
+
+Import accepts the existing single-tournament JSON backup format. Identical copies
+are deduplicated; different result versions are retained separately. History is
+local to this browser and is not included in a single-event export. Export each
+event you want to keep before clearing browser data. If history cannot be saved,
+the app stops a switch or new-event action to preserve the current tournament.
+
 Run `node --test` from the repository root. The tournament tests cover capacity,
 equal participation, double bookings, numeric grades, standings, result edits,
 saved drafts/timers, and offline reload in a real Chrome-like browser. Set

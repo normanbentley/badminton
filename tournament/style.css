@@ -79,3 +79,11 @@ button,summary,a{-webkit-tap-highlight-color:transparent}
 .history-match .team,.next-court .team,.player-match .team{font-size:14px}
 .history-match button{min-height:44px}
 .player-match .match-list{margin-bottom:0}
+.archive-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.archive-heading h2{margin:0}
+.archive-entry{border-top:1px solid var(--line);margin-top:20px;padding-top:20px}
+.archive-entry h3{font-size:16px}
+.archive-entry .actions{gap:6px}
+.archive-entry .actions button{font-size:12px;padding:10px 8px;flex:1;min-width:0}
+.archive-roster{font-size:13px;overflow-wrap:anywhere;color:var(--muted)}
+.archive-empty{margin-top:24px}
