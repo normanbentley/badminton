@@ -16,7 +16,9 @@ where supported. No hosting or repository settings are changed by this app.
 3. Create the tournament. Start each round's timer when all courts are ready.
 4. Enter each court's final score and save the round. Draws, including 0–0, are
    valid. Finishing a running or paused timer early requires confirmation.
-5. Use Results to correct scores. Undo reopens the most recently completed round
+5. Open Players for an alphabetical list, then tap a player for their match history.
+   Small grade badges appear beside names; an asterisk marks the default grade.
+6. Use Results to correct scores. Options > Undo last round reopens the most recently completed round
    and removes its standings points until it is saved again.
 
 ## Fairness and time
@@ -49,6 +51,7 @@ alphabetical display order within a tie does not award a better place.
 Data stays in this browser's local storage. It is not synced between phones or
 sent to a server. Export a JSON backup before clearing browser data, changing
 devices or replacing a tournament. Import validates the schedule and results.
+Backup import/export and New tournament are in the header's Options menu.
 Use one tab/device to operate an event.
 
 Run `node --test` from the repository root. The tournament tests cover capacity,
