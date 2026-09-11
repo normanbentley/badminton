@@ -14,6 +14,7 @@ const ROOT = path.resolve(__dirname, '..');
 test('Junior Doubles works courtside, survives refresh, corrects results and loads offline', { timeout: 120000, skip: !browser && process.env.REQUIRE_BROWSER !== '1' ? 'no Chrome-like browser found' : false }, async t => {
   assert.ok(browser, 'REQUIRE_BROWSER=1 requires a real browser');
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'junior-doubles-browser-'));
+  let serveLegacyCache = false;
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, 'http://localhost').pathname;
     const file = path.resolve(ROOT, '.' + decodeURIComponent(pathname) + (pathname.endsWith('/') ? 'index.html' : ''));
@@ -21,11 +22,15 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     fs.readFile(file, (err, data) => {
       if (err) { res.writeHead(404).end(); return; }
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+      // Simulate an existing v1 offline installation. The visible marker lets
+      // the upgrade check prove that the old cached document was replaced.
+      if (serveLegacyCache && pathname.endsWith('/sw.js')) data = String(data).replace("'junior-doubles-v2'", "'junior-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
+      if (serveLegacyCache && path.extname(file) === '.html') data = String(data).replace('<body>', '<body><div id="legacy-cache-marker" hidden>Previous cached version</div>');
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const base = process.env.TOURNAMENT_TEST_BASE || `http://127.0.0.1:${server.address().port}`;
   const child = spawn(browser, ['--headless', '--disable-gpu', '--no-sandbox', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
   let socket;
   t.after(async () => {
@@ -60,13 +65,41 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     return result.result.value;
   }
   async function until(expression) { for (let i = 0; i < 100; i++) { if (await js(expression)) return; await delay(50); } assert.fail('Timed out: ' + expression); }
-  const click = selector => js(`document.querySelector(${JSON.stringify(selector)}).click()`);
-  const fill = (selector, value) => js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.value = ${JSON.stringify(String(value))}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  async function click(selector) {
+    const point = await js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw Error('Missing control: ' + ${JSON.stringify(selector)}); el.scrollIntoView({ block: 'center' }); const rect = el.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; })()`);
+    await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+    await cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  async function fill(selector, value) {
+    await click(selector);
+    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+    await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+    await cdp('Input.insertText', { text: String(value) });
+  }
   const saved = () => js(`JSON.parse(localStorage.getItem('junior-doubles-v1'))`);
   await cdp('Runtime.enable'); await cdp('Page.enable');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
   await cdp('Page.navigate', { url: base + '/tournament/' });
   await until(`!!document.getElementById('names')`);
+
+  await t.test('Create explains incomplete or invalid setup when tapped', async () => {
+    for (const [list, reason] of [
+      ['', /4.*60 players/],
+      ['Alex\nSam\nCharlie', /4.*60 players/],
+      ['Alex\nAlex\nCharlie\nSam', /same name/],
+      ['Alex, 2.7\nHarper\nCharlie\nSam', /half-point steps/]
+    ]) {
+      if (list) await fill('#names', list);
+      await click('#create');
+      const error = await js(`document.getElementById('setup-error')?.textContent || ''`);
+      assert.match(error, reason);
+    }
+    await fill('#names', 'Alex\nSam\nCharlie\nHarper\nJamie');
+    await fill('#duration', 5);
+    await click('#create');
+    assert.match(await js(`document.getElementById('setup-error').textContent`), /Not enough time/);
+  });
 
   await t.test('setup reacts immediately to numeric grades and changing game length', async () => {
     await fill('#names', 'Alex, 3.5\nSam, 5\nCharlie, 1\nHarper\nJamie, 2.5\nTaylor, 4\nRiley, 2\nJordan, 4.5');
@@ -75,7 +108,9 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     await fill('#game', 8);
     assert.match(await js(`document.getElementById('preview').textContent`), /2 games each/);
     await fill('#game', 5); await click('#create');
+    await until(`!!document.getElementById('court-0-0')`);
     assert.equal((await saved()).players[0].skill, 3.5);
+    assert.equal((await saved()).players.find(p => p.name === 'Harper').skill, 3);
     assert.equal(await js(`document.querySelectorAll('[data-score]').length`), 4);
     assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
     const screenshot = await cdp('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
@@ -144,5 +179,86 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     await importData({ version: 99 });
     await until(`document.getElementById('storage-warning').textContent.includes('Could not import')`);
     assert.equal((await saved()).current, 3);
+  });
+  await t.test('Create works for small, odd and large groups on two and three courts', async () => {
+    await cdp('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    for (const [count, courts] of [[4, 3], [9, 2], [12, 3], [17, 2], [60, 3]]) {
+      await click('[data-action="new"]'); await click('#confirm [value="yes"]');
+      await until(`!!document.getElementById('names')`);
+      const list = Array.from({ length: count }, (_, i) => `Player ${i + 1}, ${1 + (i % 9) / 2}`).join('\n');
+      await fill('#names', list); await fill('#duration', 240); await fill('#game', 6); await fill('#change', 1);
+      await js(`document.getElementById('courts').focus()`);
+      const key = courts === 3 ? 'End' : 'Home';
+      await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: courts === 3 ? 35 : 36 });
+      await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: courts === 3 ? 35 : 36 });
+      assert.equal(await js(`document.getElementById('courts').value`), String(courts));
+      await click('#create'); await until(`!!document.getElementById('court-0-0')`);
+      const tournament = await saved();
+      assert.equal(tournament.players.length, count);
+      assert.equal(tournament.config.courts, courts);
+      const counts = Array(count).fill(0);
+      tournament.rounds.forEach(r => r.matches.forEach(m => m.teams.flat().forEach(id => counts[id]++)));
+      assert.ok(counts.every(games => games === tournament.plan.games));
+      assert.ok(tournament.plan.minutes <= 240);
+      assert.equal(await js(`document.querySelectorAll('[data-score]').length`), tournament.rounds[0].matches.length * 2);
+      assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    }
+  });
+  await t.test('Create reads the current form even when autofill does not dispatch input events', async () => {
+    await click('[data-action="new"]'); await click('#confirm [value="yes"]');
+    await until(`!!document.getElementById('names')`);
+    await js(`document.getElementById('names').value = 'Alex\\nSam\\nCharlie\\nHarper\\nJamie\\nTaylor'; document.getElementById('game').value = '10'`);
+    await click('#create'); await until(`!!document.getElementById('court-0-0')`);
+    assert.equal((await saved()).players.length, 6);
+    assert.equal((await saved()).config.game, 10);
+  });
+  await t.test('blocked browser storage still permits play and exporting a recovery backup', async () => {
+    const injection = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Storage blocked', 'SecurityError'); } });` });
+    await cdp('Page.reload'); await until(`!!document.getElementById('names')`);
+    await fill('#names', 'Alex\nSam\nCharlie\nHarper');
+    await click('#create'); await until(`!!document.getElementById('court-0-0')`);
+    assert.match(await js(`document.getElementById('storage-warning').textContent`), /could not save/);
+    const downloadPath = path.join(profile, 'downloads');
+    await cdp('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath });
+    await click('[data-action="export"]');
+    const backupPath = path.join(downloadPath, 'junior-doubles-backup.json');
+    for (let i = 0; i < 100 && !fs.existsSync(backupPath); i++) await delay(50);
+    const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    assert.equal(backup.players.length, 4);
+    assert.ok(backup.players.every(p => p.skill === 3));
+    assert.doesNotThrow(() => require('../tournament/engine.js').validate(backup));
+    await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: injection.identifier });
+    await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
+    assert.equal((await saved()).players.length, 6, 'the previous saved tournament is preserved');
+  });
+  await t.test('unreadable saved tournaments explain recovery instead of silently disabling Create', async () => {
+    await js(`localStorage.setItem('junior-doubles-v1', '{invalid-json')`);
+    await cdp('Page.reload'); await until(`!!document.getElementById('names')`);
+    await click('#create');
+    assert.match(await js(`document.getElementById('setup-error').textContent`), /Reset saved data/);
+    assert.equal(await js(`localStorage.getItem('junior-doubles-v1')`), '{invalid-json');
+    await click('[data-action="reset-corrupt"]'); await click('#confirm [value="yes"]');
+    await until(`!document.querySelector('[data-action="reset-corrupt"]')`);
+    await fill('#names', 'Alex\nSam\nCharlie\nHarper');
+    await click('#create'); await until(`!!document.getElementById('court-0-0')`);
+    assert.equal((await saved()).players.length, 4);
+    assert.deepEqual(errors, []);
+  });
+  await t.test('an existing v1 offline installation upgrades without losing its tournament', { skip: !!process.env.TOURNAMENT_TEST_BASE }, async () => {
+    await js(`(async () => { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); for (const name of await caches.keys()) await caches.delete(name); })()`);
+    await cdp('Page.navigate', { url: 'about:blank' });
+    serveLegacyCache = true;
+    await cdp('Page.navigate', { url: base + '/tournament/' });
+    await until(`!!document.getElementById('court-0-0') && !!navigator.serviceWorker.controller`);
+    await until(`caches.has('junior-doubles-v1')`);
+    await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
+    assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), true);
+    serveLegacyCache = false;
+    await js(`navigator.serviceWorker.getRegistration().then(r => r.update())`);
+    await until(`(async () => (await caches.has('junior-doubles-v2')) && !(await caches.has('junior-doubles-v1')))()`);
+    await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
+    assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), false);
+    assert.equal((await saved()).players.length, 4);
+    assert.deepEqual(errors, []);
   });
 });
