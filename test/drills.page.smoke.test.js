@@ -21,6 +21,8 @@ const path = require("node:path");
 
 const DRILLS_DIR = path.join(__dirname, "..", "drills");
 const RENDER_TIMEOUT_MS = 60_000;
+const renderBrowser = require("../test-support/render-browser.js");
+const cleanupBrowser = require("../test-support/cleanup-browser.js");
 
 function findBrowser() {
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
@@ -60,26 +62,9 @@ function renderPage(browser, seed) {
     const page = path.join(work, "index.html");
     fs.writeFileSync(page, html);
 
-    return execFileSync(
-      browser,
-      [
-        "--headless",
-        "--disable-gpu",
-        "--no-sandbox",
-        // Its own profile, so a running Chrome is neither disturbed nor blocking.
-        "--user-data-dir=" + path.join(work, "profile"),
-        "--dump-dom",
-        "file:///" + page.replace(/\\/g, "/")
-      ],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-        maxBuffer: 16 * 1024 * 1024,
-        timeout: RENDER_TIMEOUT_MS
-      }
-    );
+    return renderBrowser(browser, page, path.join(work, "profile"), RENDER_TIMEOUT_MS);
   } finally {
-    fs.rmSync(work, { recursive: true, force: true });
+    cleanupBrowser(work);
   }
 }
 
