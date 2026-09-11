@@ -24,7 +24,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
       // Simulate an existing v1 offline installation. The visible marker lets
       // the upgrade check prove that the old cached document was replaced.
-      if (serveLegacyCache && pathname.endsWith('/sw.js')) data = String(data).replace("'junior-doubles-v3'", "'junior-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
+      if (serveLegacyCache && pathname.endsWith('/sw.js')) data = String(data).replace("'junior-doubles-v4'", "'junior-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
       if (serveLegacyCache && path.extname(file) === '.html') data = String(data).replace('<body>', '<body><div id="legacy-cache-marker" hidden>Previous cached version</div>');
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
     });
@@ -148,6 +148,51 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
     await click('[data-tab="round"]');
     await cdp('Emulation.setDeviceMetricsOverride', viewport);
+  });
+  await t.test('next-round preview matches the schedule and timer aids survive refresh', async () => {
+    const original = await saved();
+    await click('.next-round > summary');
+    const preview = await js(`document.querySelector('.next-round').textContent`);
+    for (const match of original.rounds[1].matches) for (const id of match.teams.flat()) assert.ok(preview.includes(original.players[id].name));
+    assert.match(await js(`document.getElementById('finish-time').textContent`), /Estimated finish/);
+    const mock = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+      window.wakeRequests = 0; window.wakeReleases = 0; window.buzzes = 0; window.tones = 0;
+      const oscillator = AudioContext.prototype.createOscillator;
+      AudioContext.prototype.createOscillator = function() { window.tones++; return oscillator.call(this); };
+      Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => {
+        window.wakeRequests++; const lock = new EventTarget(); lock.released = false;
+        lock.release = async () => { lock.released = true; window.wakeReleases++; lock.dispatchEvent(new Event('release')); }; return lock;
+      } } });
+      Object.defineProperty(navigator, 'vibrate', { configurable: true, value: () => { window.buzzes++; return true; } });
+    ` });
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
+    await click('.timer-tools > summary');
+    await click('#sound-alert');
+    await click('[data-action="test-alert"]');
+    assert.equal(await js('window.buzzes'), 1);
+    await until('window.tones === 3');
+    await click('[data-action="timer"]');
+    await until(`window.wakeRequests === 1`);
+    assert.match(await js(`document.getElementById('wake-status').textContent`), /Keeping screen awake/);
+    await click('[data-action="timer"]');
+    await until(`window.wakeReleases === 1`);
+    await js(`navigator.wakeLock.request = async () => { throw Error('Battery saver'); }`);
+    await click('[data-action="timer"]');
+    await until(`document.getElementById('wake-status').textContent.includes('unavailable')`);
+    assert.ok((await saved()).timer.end > Date.now(), 'wake-lock rejection must not stop the timer');
+    await js(`(() => { const s = JSON.parse(localStorage.getItem('junior-doubles-v1')); s.timer = { remaining: 1000, end: Date.now() + 1000 }; localStorage.setItem('junior-doubles-v1', JSON.stringify(s)); })()`);
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
+    assert.equal(await js(`document.getElementById('sound-alert').checked`), true);
+    await until(`document.getElementById('clock').textContent === '00:00'`);
+    await until(`window.buzzes === 1`);
+    assert.equal((await saved()).timer.alerted, true);
+    await click('[data-tab="players"]'); await click('[data-tab="round"]');
+    assert.equal(await js('window.buzzes'), 1, 'rerender must not repeat the alert');
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
+    assert.equal(await js('window.buzzes'), 0, 'refresh must not replay an expired alert');
+    await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: mock.identifier });
+    await js(`localStorage.setItem('junior-doubles-v1', ${JSON.stringify(JSON.stringify(original))}); localStorage.removeItem('junior-doubles-v1-preferences')`);
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
   });
   await t.test('blank scores are rejected; drafts and running timer survive reload', async () => {
     await click('[data-action="advance"]');
@@ -325,7 +370,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), true);
     serveLegacyCache = false;
     await js(`navigator.serviceWorker.getRegistration().then(r => r.update())`);
-    await until(`(async () => (await caches.has('junior-doubles-v3')) && !(await caches.has('junior-doubles-v1')))()`);
+    await until(`(async () => (await caches.has('junior-doubles-v4')) && !(await caches.has('junior-doubles-v1')))()`);
     await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
     assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), false);
     assert.equal((await saved()).players.length, 4);

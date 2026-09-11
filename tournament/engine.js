@@ -108,10 +108,21 @@
     });
     if (counts.some(c => c !== plan.games)) throw Error('Unequal saved schedule.');
     if (s.timer !== null && (!s.timer || !Number.isFinite(s.timer.remaining) || s.timer.remaining < 0 || s.timer.remaining > s.config.game * 60000 || (s.timer.end !== null && (!Number.isFinite(s.timer.end) || s.timer.end < 0)))) throw Error('Invalid saved timer.');
+    for (const field of ['startedAt', 'readyAt']) if (s[field] !== undefined && (!Number.isFinite(s[field]) || s[field] < 0 || s[field] > 8640000000000000)) throw Error('Invalid saved event time.');
+    if (s.timer?.alerted !== undefined && typeof s.timer.alerted !== 'boolean') throw Error('Invalid saved alert.');
     s.plan = plan;
     return s;
   }
-  const api = { parsePlayers, capacity, schedule, standings, validScore, validate };
+  function finishEstimate(s, now) {
+    if (s.current >= s.rounds.length) return null;
+    const future = s.rounds.length - s.current - 1;
+    const currentEnd = s.timer?.end != null ? Math.max(now, s.timer.end)
+      : Math.max(now, s.readyAt || now) + (s.timer ? s.timer.remaining : s.config.game * 60000);
+    const finish = currentEnd + future * (s.config.game + s.config.change) * 60000;
+    const deadline = s.startedAt ? s.startedAt + s.config.duration * 60000 : null;
+    return { finish, deadline, overrun: deadline ? Math.max(0, finish - deadline) : 0 };
+  }
+  const api = { parsePlayers, capacity, schedule, standings, validScore, validate, finishEstimate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.JuniorTournament = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -20,6 +20,14 @@ where supported. No hosting or repository settings are changed by this app.
    Small grade badges appear beside names; an asterisk marks the default grade.
 6. Use Results to correct scores. Options > Undo last round reopens the most recently completed round
    and removes its standings points until it is saved again.
+7. Expand Up next below the scores to see the next round's courts and resting players.
+   Timer settings offers screen-awake control, optional sound and a Test alert button.
+   The app vibrates at time where supported. Keep it visible for alerts, and use
+   Test alert to check media volume. Screen-awake requests can be refused by the phone;
+   the settings show whether the screen is being kept awake.
+8. Estimated finish includes remaining games and changeovers and updates with delays
+   and pauses. The time budget starts when the tournament is created. Older backups
+   without a start time begin that budget when the timer is next started.
 
 ## Fairness and time
 

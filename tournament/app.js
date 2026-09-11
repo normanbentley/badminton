@@ -5,6 +5,53 @@
   const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let state = null, tab = 'round', editing = null, storageBlocked = false;
   let setup = { names: '', courts: 2, duration: 90, game: 8, change: 2 };
+  let wakeLock = null, wakePending = false, wakeFailed = false, audioContext = null;
+  let keepAwake = true, sound = false;
+  try { const prefs = JSON.parse(localStorage.getItem(KEY + '-preferences')); if (prefs) { keepAwake = prefs.keepAwake !== false; sound = prefs.sound === true; } } catch {}
+  const running = () => !!state?.timer?.end && remaining() > 0 && state.current < state.rounds.length;
+  function wakeStatus() {
+    const el = document.getElementById('wake-status');
+    if (el) el.textContent = !keepAwake ? 'Screen awake is off.' : !navigator.wakeLock ? 'Screen awake is unavailable in this browser.' : wakeLock && !wakeLock.released ? 'Keeping screen awake.' : wakeFailed ? 'Screen awake unavailable. Check battery-saving settings.' : 'Screen stays awake while the timer runs.';
+  }
+  async function syncWake() {
+    const wanted = keepAwake && running() && document.visibilityState === 'visible';
+    if (!wanted && wakeLock) { const lock = wakeLock; wakeLock = null; try { await lock.release(); } catch {} }
+    if (wanted && navigator.wakeLock && !wakeLock && !wakePending && !wakeFailed) {
+      wakePending = true;
+      try {
+        const lock = await navigator.wakeLock.request('screen');
+        wakeLock = lock;
+        lock.addEventListener('release', () => { if (wakeLock === lock) { wakeLock = null; wakeFailed = true; } wakeStatus(); });
+        if (!keepAwake || !running() || document.visibilityState !== 'visible') { wakeLock = null; await lock.release(); }
+      } catch { wakeFailed = true; }
+      finally { wakePending = false; }
+    }
+    wakeStatus();
+  }
+  function prepareAudio() {
+    if (!sound) return;
+    try { audioContext ||= new (window.AudioContext || window.webkitAudioContext)(); audioContext.resume().catch(() => {}); } catch {}
+  }
+  function chime() {
+    if (!sound || audioContext?.state !== 'running') return;
+    for (let i = 0; i < 3; i++) {
+      const tone = audioContext.createOscillator(), gain = audioContext.createGain();
+      const start = audioContext.currentTime + i * .3;
+      tone.frequency.value = 880; gain.gain.setValueAtTime(.0001, start);
+      gain.gain.exponentialRampToValueAtTime(.2, start + .02);
+      gain.gain.exponentialRampToValueAtTime(.0001, start + .22);
+      tone.connect(gain); gain.connect(audioContext.destination); tone.start(start); tone.stop(start + .25);
+      tone.onended = () => { tone.disconnect(); gain.disconnect(); };
+    }
+  }
+  function timerTools() {
+    return `<details class="timer-tools"><summary>Timer settings</summary><label><input type="checkbox" id="keep-awake" ${keepAwake ? 'checked' : ''}> Keep screen awake</label><label><input type="checkbox" id="sound-alert" ${sound ? 'checked' : ''}> Sound at end of round</label><button data-action="test-alert">Test alert</button><p>Vibration where supported. Keep the app visible for alerts; sound uses your media volume. Finish estimates include changeovers and update as you wait or pause.</p><p id="wake-status"></p></details><div class="finish-estimate"><strong id="finish-time"></strong><p id="finish-note"></p></div>`;
+  }
+  function nextRoundView() {
+    const next = state.rounds[state.current + 1];
+    if (!next) return '<p class="help next-round">Final round. No more games after this one.</p>';
+    return `<details class="card next-round"><summary>Up next: round ${state.current + 2}</summary>${next.matches.map((m, i) => `<div class="next-court"><span class="court-number">COURT ${i + 1}</span><p>${esc(names(m.teams[0]))}<br><span class="muted">vs</span> ${esc(names(m.teams[1]))}</p></div>`).join('')}<p class="help">Resting: ${next.resting.length ? esc(names(next.resting)) : 'Nobody'}</p></details>`;
+  }
   function warning(message) { const el = document.getElementById('storage-warning'); el.textContent = message; el.hidden = false; }
   let storedTournament = null, storedSetup = null;
   try {
@@ -90,7 +137,7 @@
       button.disabled = true; button.textContent = 'Creating tournament…'; button.setAttribute('aria-busy', 'true');
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
       const generated = E.schedule(players, config, Date.now());
-      state = { version: 1, players, config, ...generated, current: 0, timer: null, drafts: {} };
+      state = { version: 1, players, config, ...generated, current: 0, timer: null, drafts: {}, startedAt: Date.now() };
       save(); tab = 'round'; render(); window.scrollTo(0, 0);
     } catch (error) {
       button.disabled = false; button.textContent = 'Create tournament'; button.removeAttribute('aria-busy');
@@ -129,7 +176,7 @@
   function roundView() {
     if (state.current === state.rounds.length) return `<section class="card success"><p class="eyebrow">THAT’S A WRAP</p><strong>Everyone played ${state.plan.games} games</strong><p>Well played, team. Your final standings are ready.</p><button class="primary wide" data-tab="standings">See final standings</button></section>`;
     const r = state.rounds[state.current];
-    return `<div class="round-heading"><h2>Round ${state.current + 1} <span class="muted">of ${state.rounds.length}</span></h2><span class="pill">${state.plan.games} games each</span></div><div class="progress"><div style="width:${state.current / state.rounds.length * 100}%"></div></div><section class="timer-card"><div class="timer-row"><div><div class="eyebrow" style="color:#d8efaa">ROUND TIMER</div><div id="clock" class="clock" role="timer">${clockText(remaining())}</div></div><button id="timer-toggle" data-action="timer">${state.timer?.end ? 'Pause' : state.timer ? 'Resume' : 'Start game'}</button></div><p id="timer-note" aria-live="polite"></p><p>${state.config.change} min changeover between rounds. Start when all courts are ready.</p></section>${r.matches.map((m, i) => `<section class="card"><div class="court-head"><span class="court-number">COURT ${i + 1}</span><span class="muted">Doubles</span></div>${matchView(m)}${scoreFields(m, 'court-' + i, state.drafts?.[i])}</section>`).join('')}<aside class="rest"><h3>${r.resting.length ? 'Resting this round' : 'Everyone is on court'}</h3><div class="rest-players">${r.resting.length ? r.resting.map(playerLabel).join('') : 'Grab your partner and enjoy the game.'}</div></aside>${state.players.some(p => p.grade === '') ? '<p class="help">* Grade 3 used where no grade was entered.</p>' : ''}<p id="result-error" class="error" role="alert"></p><button class="primary wide" data-action="advance">${state.current + 1 === state.rounds.length ? 'Save results & finish' : 'Save results & next round'}</button><p class="help">Enter both scores on every court. Draws are welcome. Scores save together when you advance.</p>`;
+    return `<div class="round-heading"><h2>Round ${state.current + 1} <span class="muted">of ${state.rounds.length}</span></h2><span class="pill">${state.plan.games} games each</span></div><div class="progress"><div style="width:${state.current / state.rounds.length * 100}%"></div></div><section class="timer-card"><div class="timer-row"><div><div class="eyebrow" style="color:#d8efaa">ROUND TIMER</div><div id="clock" class="clock" role="timer">${clockText(remaining())}</div></div><button id="timer-toggle" data-action="timer">${state.timer?.end ? 'Pause' : state.timer ? 'Resume' : 'Start game'}</button></div><p id="timer-note" aria-live="polite"></p><p>${state.config.change} min changeover between rounds. Start when all courts are ready.</p>${timerTools()}</section>${r.matches.map((m, i) => `<section class="card"><div class="court-head"><span class="court-number">COURT ${i + 1}</span><span class="muted">Doubles</span></div>${matchView(m)}${scoreFields(m, 'court-' + i, state.drafts?.[i])}</section>`).join('')}<aside class="rest"><h3>${r.resting.length ? 'Resting this round' : 'Everyone is on court'}</h3><div class="rest-players">${r.resting.length ? r.resting.map(playerLabel).join('') : 'Grab your partner and enjoy the game.'}</div></aside>${state.players.some(p => p.grade === '') ? '<p class="help">* Grade 3 used where no grade was entered.</p>' : ''}<p id="result-error" class="error" role="alert"></p><button class="primary wide" data-action="advance">${state.current + 1 === state.rounds.length ? 'Save results & finish' : 'Save results & next round'}</button><p class="help">Enter both scores on every court. Draws are welcome. Scores save together when you advance.</p>${nextRoundView()}`;
   }
   function standingsView() {
     const complete = state.current === state.rounds.length;
@@ -139,6 +186,7 @@
     return `<section class="card"><h2>Results & schedule</h2><p class="help">${state.plan.rounds} rounds · ${state.plan.minutes} minutes planned, including changeovers. Editing a result updates standings immediately.</p>${state.rounds.map((r, ri) => `<details ${ri === Math.max(0, state.current - 1) ? 'open' : ''}><summary>Round ${ri + 1} <span class="muted">${ri < state.current ? 'Completed' : ri === state.current ? 'Current' : 'Upcoming'}</span></summary>${r.matches.map((m, mi) => `<div class="history-match"><span class="court-number">COURT ${mi + 1}</span><p>${esc(names(m.teams[0]))}<br><span class="muted">vs</span> ${esc(names(m.teams[1]))}</p>${m.score ? `<b>${m.score[0]} : ${m.score[1]}</b> <button data-edit="${ri},${mi}">Edit score</button>` : '<span class="muted">Not played yet</span>'}${editing === ri + ',' + mi ? `${scoreFields(m, 'edit')}<p id="edit-error" class="error" role="alert"></p><div class="actions"><button class="primary" data-action="save-edit">Save correction</button><button data-action="cancel-edit">Cancel</button></div>` : ''}</div>`).join('')}<p class="help">Resting: ${r.resting.length ? r.resting.map(id => esc(state.players[id].name)).join(', ') : 'Nobody'}</p></details>`).join('')}</section>`;
   }
   function render() {
+    syncWake();
     document.getElementById('options-slot').innerHTML = utilities();
     document.body.classList.toggle('running', !!state);
     if (!state) return setupView();
@@ -156,18 +204,28 @@
     catch (error) { document.getElementById('result-error').textContent = error.message; return; }
     const finish = () => {
       state.rounds[state.current].matches.forEach((m, i) => { m.score = scores[i]; });
-      state.current++; state.timer = null; state.drafts = {}; editing = null; save(); render(); window.scrollTo(0, 0);
+      state.current++; state.timer = null; state.readyAt = Date.now() + state.config.change * 60000; state.drafts = {}; editing = null; save(); render(); window.scrollTo(0, 0);
     };
     if (state.timer && remaining() > 0) confirmAction('Finish this round early?', 'There is still time on the round timer. Save these as the final scores?', 'Save round', finish);
     else finish();
   }
   function tick() {
+    syncWake();
+    if (state?.timer?.end && remaining() === 0 && !state.timer.alerted && document.visibilityState === 'visible') {
+      state.timer.alerted = true; save();
+      try { navigator.vibrate?.([200, 100, 200, 100, 400]); chime(); } catch {}
+    }
     const clock = document.getElementById('clock');
     if (!clock || !state) return;
     const ms = remaining(); clock.textContent = clockText(ms);
     const note = document.getElementById('timer-note');
-    const message = !state.timer ? 'Ready when you are. Keep this screen visible for the timer.' : ms === 0 ? 'Time! Finish the rally, then enter final scores.' : state.timer.end === null ? 'Paused. Extra pauses can extend your event.' : 'Game on. Timer continues if you leave this page.';
-    if (note.textContent !== message) { note.textContent = message; if (state.timer && ms === 0 && navigator.vibrate) navigator.vibrate([200, 100, 200]); }
+    const message = !state.timer ? 'Ready when you are.' : ms === 0 ? 'Time! Finish the rally, then enter final scores.' : state.timer.end === null ? 'Paused. Extra pauses can extend your event.' : 'Game on. Timer continues if you leave this page.';
+    if (note.textContent !== message) note.textContent = message;
+    const estimate = E.finishEstimate(state, Date.now());
+    const time = timestamp => new Date(timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    document.getElementById('finish-time').textContent = `Estimated finish ${time(estimate.finish)}`;
+    document.getElementById('finish-note').textContent = `${estimate.deadline ? `Budget ends ${time(estimate.deadline)}. ` : ''}${estimate.overrun >= 30000 ? `About ${Math.max(1, Math.round(estimate.overrun / 60000))} min over budget. ` : ''}Includes changeovers.`;
+    document.querySelector('.finish-estimate').classList.toggle('over-budget', estimate.overrun >= 30000);
     document.getElementById('timer-toggle').disabled = !!state.timer && ms === 0;
   }
   app.addEventListener('input', event => {
@@ -185,8 +243,11 @@
     switch (button.dataset.action) {
       case 'create': createTournament(); break;
       case 'timer': {
+        prepareAudio(); wakeFailed = false;
+        state.startedAt ||= Date.now();
         const ms = remaining(); state.timer = state.timer?.end ? { remaining: ms, end: null } : { remaining: ms, end: Date.now() + ms }; save(); render(); break;
       }
+      case 'test-alert': prepareAudio(); try { navigator.vibrate?.([200, 100, 200]); } catch {} setTimeout(chime, 100); break;
       case 'advance': advance(); break;
       case 'undo': confirmAction('Reopen the previous round?', 'The previous round’s scores will become editable and its points will be removed until you save it again. Any unsaved scores in the current round will be discarded.', 'Reopen round', () => {
         state.current--; state.drafts = {}; state.rounds[state.current].matches.forEach((m, i) => { state.drafts[i] = m.score.map(String); m.score = null; }); state.timer = { remaining: 0, end: null }; tab = 'round'; save(); render();
@@ -215,6 +276,10 @@
     if (event.key === 'Escape' && menu?.open) { menu.open = false; menu.querySelector('summary').focus(); }
   });
   document.addEventListener('change', async event => {
+    if (['keep-awake', 'sound-alert'].includes(event.target.id)) {
+      keepAwake = document.getElementById('keep-awake').checked; sound = document.getElementById('sound-alert').checked;
+      store(KEY + '-preferences', { keepAwake, sound }); wakeFailed = false; prepareAudio(); syncWake(); return;
+    }
     if (event.target.id !== 'import') return;
     const file = event.target.files[0]; if (!file) return;
     try {
@@ -225,6 +290,7 @@
     event.target.value = '';
   });
   window.addEventListener('storage', event => { if (event.key === KEY) warning('This tournament changed in another tab. Reload before entering more results. Use one tab to run the event.'); });
+  document.addEventListener('visibilitychange', () => { wakeFailed = false; tick(); });
   render(); setInterval(tick, 500);
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('./sw.js').then(async registration => {
     await navigator.serviceWorker.ready;

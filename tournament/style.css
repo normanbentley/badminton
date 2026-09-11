@@ -47,3 +47,16 @@ button.danger-primary:hover{background:#842f27}
 .history-match button{min-height:36px;padding:7px 12px;font-size:12px}
 .options-menu>summary:focus-visible,.player-entry>summary:focus-visible{outline:3px solid #d19a24;outline-offset:3px}
 button,summary,a{-webkit-tap-highlight-color:transparent}
+.timer-tools{border-top:1px solid #ffffff30;margin-top:12px}
+.timer-tools summary{font-size:12px;min-height:44px;padding:12px 0}
+.timer-tools label{display:flex;align-items:center;gap:10px;min-height:44px;font-size:13px}
+.timer-tools input{width:20px;height:20px;min-height:20px;margin:0;accent-color:#d8efaa}
+.timer-tools button{margin-top:8px}
+.finish-estimate{border-top:1px solid #ffffff30;margin-top:12px;padding-top:12px;font-size:14px}
+.finish-estimate.over-budget strong{color:#ffe0a0}
+.next-round{margin-top:20px}
+.next-round>summary{padding:0;display:flex;align-items:center;min-height:44px;font-size:15px}
+.next-round>summary::before{content:'+';margin-right:10px;color:var(--green)}
+.next-round[open]>summary::before{content:'−'}
+.next-court{border-top:1px solid var(--line);padding-top:12px;margin-top:10px}
+.next-court p{margin:8px 0;overflow-wrap:anywhere}
