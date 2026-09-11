@@ -93,7 +93,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     assert.equal((await saved()).timer.end, end);
     await click('[data-action="advance"]');
     assert.equal(await js(`document.getElementById('confirm').open`), true);
-    await click('#confirm [value="yes"]'); await until(`document.body.textContent.includes('Round 2')`);
+    await click('#confirm [value="yes"]'); await until(`document.body?.textContent.includes('Round 2')`);
     assert.equal((await saved()).current, 1);
     await click('[data-tab="standings"]');
     assert.equal(await js(`document.querySelectorAll('.stand-row').length`), 8);
@@ -126,7 +126,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     await cdp('Network.enable');
     await cdp('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
     await cdp('Page.reload');
-    await until(`document.body.textContent.includes('Everyone played 3 games')`);
+    await until(`document.body?.textContent.includes('Everyone played 3 games')`);
     assert.equal((await saved()).current, 3);
     assert.deepEqual(errors, []);
   });
@@ -139,7 +139,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     }
     await importData(backup); await until(`document.getElementById('confirm').open`);
     await click('#confirm [value="yes"]');
-    await until(`document.body.textContent.includes('Everyone played 3 games')`);
+    await until(`document.body?.textContent.includes('Everyone played 3 games')`);
     assert.equal((await saved()).current, 3);
     await importData({ version: 99 });
     await until(`document.getElementById('storage-warning').textContent.includes('Could not import')`);
