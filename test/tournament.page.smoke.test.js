@@ -88,6 +88,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
   await cdp('Page.navigate', { url: base + '/tournament/' });
   await until(`!!document.getElementById('names')`);
+  assert.equal(await js(`document.querySelector('header > .muted').textContent`), 'Fair games. Fresh partners. A great club day.');
 
   await t.test('Create explains incomplete or invalid setup when tapped', async () => {
     for (const [list, reason] of [
