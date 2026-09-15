@@ -24,7 +24,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
       // Simulate an existing v1 offline installation. The visible marker lets
       // the upgrade check prove that the old cached document was replaced.
-      if (serveLegacyCache && pathname.endsWith('/sw.js')) data = String(data).replace("'junior-doubles-v6'", "'junior-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
+      if (serveLegacyCache && pathname.endsWith('/sw.js')) data = String(data).replace("'junior-doubles-v7'", "'junior-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
       if (serveLegacyCache && path.extname(file) === '.html') data = String(data).replace('<body>', '<body><div id="legacy-cache-marker" hidden>Previous cached version</div>');
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
     });
@@ -455,7 +455,7 @@ test('Junior Doubles works courtside, survives refresh, corrects results and loa
     assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), true);
     serveLegacyCache = false;
     await js(`navigator.serviceWorker.getRegistration().then(r => r.update())`);
-    await until(`(async () => (await caches.has('junior-doubles-v6')) && !(await caches.has('junior-doubles-v1')))()`);
+    await until(`(async () => (await caches.has('junior-doubles-v7')) && !(await caches.has('junior-doubles-v1')))()`);
     await cdp('Page.reload'); await until(`!!document.getElementById('court-0-0')`);
     assert.equal(await js(`!!document.getElementById('legacy-cache-marker')`), false);
     assert.equal((await saved()).players.length, 4);
