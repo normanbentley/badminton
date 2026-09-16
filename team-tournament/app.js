@@ -2,7 +2,7 @@
 (() => {
   const E = window.JuniorTeamTournament, app = document.getElementById('app'), options = document.getElementById('options-slot');
   const STORE = 'junior-team-doubles-v1', DRAFT = 'junior-team-doubles-setup-v1';
-  const defaults = { names: '', courts: 2, duration: 90, game: 10, change: 2, courtNumbers: '' };
+  const defaults = { names: '', mode: 'equal', maxGame: 10, courts: 2, duration: 90, game: 10, change: 2, courtNumbers: '' };
   let state = null, setup = { ...defaults, ...load(DRAFT) }, pairing = null, previousPairs = [], selected = null, tab = 'round', tick;
   const esc = value => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   function load(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
@@ -16,28 +16,90 @@
   function setupView() {
     clearInterval(tick); document.body.classList.remove('running');
     options.innerHTML = `<button data-action="import" aria-label="Import tournament backup">Import backup</button><input id="import-file" type="file" accept="application/json,.json" hidden>`;
-    app.innerHTML = `<section class="card"><p class="eyebrow">STEP 1 OF 2</p><h2>Add the players</h2><label for="names">Who’s playing?</label><p class="help">Paste one player per line. Add an optional grade after a comma. Grades run from 1 to 5 and may use half points.</p><textarea id="names" rows="9" placeholder="Alex, 3.5&#10;Charlie, 2&#10;Harper, 4&#10;Sam, 3">${esc(setup.names)}</textarea><div class="grid" style="margin-top:20px"><label>Courts<select id="courts">${[1,2,3,4,5].map(n => `<option ${Number(setup.courts) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label><label>Total (min)<input id="duration" type="number" min="5" max="480" value="${esc(setup.duration)}"></label><label>Game (min)<input id="game" type="number" min="1" max="60" value="${esc(setup.game)}"></label><label>Changeover<input id="change" type="number" min="0" max="15" value="${esc(setup.change)}"></label></div><label style="margin-top:16px">Court numbers <span class="muted">(optional)</span><input id="court-numbers" value="${esc(setup.courtNumbers)}" placeholder="e.g. 3, 4"></label><div id="preview" class="preview" aria-live="polite"></div><p id="setup-error" class="error" role="alert" tabindex="-1"></p><button class="primary wide" data-action="suggest">Suggest balanced pairs</button></section>`;
-    ['names','courts','duration','game','change','court-numbers'].forEach(id => document.getElementById(id).addEventListener('input', updateSetup));
+    app.innerHTML = `<section class="card">
+      <p class="eyebrow">STEP 1 OF 2</p><h2>Add the players</h2>
+      <label for="names">Who's playing?</label>
+      <p class="help">Paste one player per line. Add an optional grade after a comma. Grades run from 1 to 5 and may use half points.</p>
+      <textarea id="names" rows="9" placeholder="Alex, 3.5&#10;Charlie, 2&#10;Harper, 4&#10;Sam, 3">${esc(setup.names)}</textarea>
+      <fieldset class="schedule-modes"><legend>Match schedule</legend>
+        <label><input id="mode-equal" name="mode" type="radio" value="equal" ${setup.mode !== 'round-robin' ? 'checked' : ''}><span>Equal matches<small>Fit equal games into the time available. Opponents may repeat.</small></span></label>
+        <label><input id="mode-round-robin" name="mode" type="radio" value="round-robin" ${setup.mode === 'round-robin' ? 'checked' : ''} aria-describedby="round-robin-status"><span>Round robin<small>Each team plays every other team once.</small></span></label>
+      </fieldset>
+      <p id="round-robin-status" class="help" aria-live="polite"></p>
+      <div class="grid">
+        <label>Courts<select id="courts">${[1,2,3,4,5].map(n => `<option ${Number(setup.courts) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label>Available (min)<input id="duration" type="number" min="5" max="480" value="${esc(setup.duration)}"></label>
+        <label id="game-field">Game (min)<input id="game" type="number" min="1" max="60" value="${esc(setup.game)}"></label>
+        <label id="max-game-field">Game cap (min)<input id="max-game" type="number" min="5" max="60" value="${esc(setup.maxGame)}" aria-describedby="game-cap-help"></label>
+        <label>Changeover (min)<input id="change" type="number" min="0" max="15" value="${esc(setup.change)}"></label>
+      </div>
+      <p id="game-cap-help" class="help">Round robin uses games of at least 5 minutes, up to your cap. Spare time stays free.</p>
+      <label class="court-numbers-label">Court numbers <span class="muted">(optional)</span><input id="court-numbers" value="${esc(setup.courtNumbers)}" placeholder="e.g. 3, 4"></label>
+      <div id="preview" class="preview" aria-live="polite"></div>
+      <p id="setup-error" class="error" role="alert" tabindex="-1"></p>
+      <button class="primary wide" data-action="suggest">Suggest balanced pairs</button>
+    </section>`;
+    ['names','courts','duration','game','max-game','change','court-numbers','mode-equal','mode-round-robin'].forEach(id => document.getElementById(id).addEventListener('input', updateSetup));
     updateSetup();
   }
-  function readSetup() { return { names: document.getElementById('names').value, courts: Number(document.getElementById('courts').value), duration: Number(document.getElementById('duration').value), game: Number(document.getElementById('game').value), change: Number(document.getElementById('change').value), courtNumbers: document.getElementById('court-numbers').value } }
+  function readSetup() {
+    return {
+      names: document.getElementById('names').value,
+      mode: document.querySelector('input[name="mode"]:checked').value,
+      courts: Number(document.getElementById('courts').value), duration: Number(document.getElementById('duration').value),
+      game: Number(document.getElementById('game').value), maxGame: Number(document.getElementById('max-game').value),
+      change: Number(document.getElementById('change').value), courtNumbers: document.getElementById('court-numbers').value
+    };
+  }
   function updateSetup() {
     setup = readSetup(); storeDraft();
-    try { const players = E.parsePlayers(setup.names), plan = E.capacity(players.length / 2, setup); E.courtNumbers(setup.courtNumbers, setup.courts); document.getElementById('preview').innerHTML = plan.games ? `<strong>${players.length / 2} fixed teams · ${plan.games} matches each</strong><p>${plan.rounds} rounds · ${plan.minutes} of ${setup.duration} minutes planned.</p>` : '<p>Not enough time for every team to play equally.</p>'; document.getElementById('setup-error').textContent = ''; }
-    catch (error) { document.getElementById('preview').textContent = error.message; }
+    const robin = setup.mode === 'round-robin', option = document.getElementById('mode-round-robin');
+    const status = document.getElementById('round-robin-status'), preview = document.getElementById('preview');
+    document.getElementById('game-field').hidden = robin;
+    document.getElementById('max-game-field').hidden = !robin;
+    document.getElementById('game-cap-help').hidden = !robin;
+    document.getElementById('setup-error').textContent = '';
+    document.querySelector('[data-action="suggest"]').disabled = false;
+    option.disabled = false;
+    status.textContent = 'Add players and available time to check whether round robin fits.';
+    try {
+      const players = E.parsePlayers(setup.names);
+      const eligibility = E.capacity(players.length / 2, { ...setup, mode: 'round-robin', maxGame: 10 });
+      option.disabled = !eligibility.feasible;
+      status.textContent = eligibility.feasible
+        ? `Round robin fits: ${eligibility.games} matches each across ${eligibility.rounds} rounds.`
+        : robin ? 'Round robin cannot fit 5-minute games yet.' : E.roundRobinError(eligibility);
+      E.courtNumbers(setup.courtNumbers, setup.courts);
+      const plan = E.capacity(players.length / 2, setup);
+      if (robin && !plan.feasible) {
+        preview.textContent = E.roundRobinError(plan);
+        document.querySelector('[data-action="suggest"]').disabled = true;
+        return;
+      }
+      preview.innerHTML = plan.games
+        ? `<strong>${players.length / 2} fixed teams · ${plan.games} matches each</strong><p>${plan.rounds} rounds · ${robin ? `${plan.game}-minute games · ` : ''}${plan.minutes} of ${setup.duration} minutes planned.</p>${robin ? `<p>${plan.spare} minutes spare for warm-up, breaks or friendly games.</p>` : ''}`
+        : '<p>Not enough time for every team to play equally.</p>';
+    } catch (error) { preview.textContent = error.message; }
   }
   function suggest() {
     try {
-      setup = readSetup(); const players = E.parsePlayers(setup.names), config = { courts: setup.courts, duration: setup.duration, game: setup.game, change: setup.change, courtNumbers: E.courtNumbers(setup.courtNumbers, setup.courts) };
-      if (!E.capacity(players.length / 2, config).games) throw Error('Not enough time for every team to play equally.');
+      setup = readSetup(); storeDraft();
+      const players = E.parsePlayers(setup.names);
+      const config = { mode: setup.mode, courts: setup.courts, duration: setup.duration, game: setup.game, change: setup.change, courtNumbers: E.courtNumbers(setup.courtNumbers, setup.courts) };
+      if (config.mode === 'round-robin') config.maxGame = setup.maxGame;
+      const plan = E.capacity(players.length / 2, config);
+      if (config.mode === 'round-robin') {
+        if (!plan.feasible) throw Error(E.roundRobinError(plan));
+        config.game = plan.game;
+      } else if (!plan.games) throw Error('Not enough time for every team to play equally.');
       pairing = { players, config, pairs: E.makePairs(players, [], Date.now()) }; previousPairs = []; selected = null; renderPairs();
     } catch (error) { const el = document.getElementById('setup-error'); el.textContent = error.message; el.focus(); }
   }
   function balance() { const totals = pairing.pairs.map(pair => pair.skill), spread = Math.max(...totals) - Math.min(...totals); return { spread, label: spread <= .5 ? 'Very balanced' : spread <= 1 ? 'Balanced' : spread <= 2 ? 'Some grade difference' : 'Large grade difference' }; }
   function renderPairs() {
     options.innerHTML = '';
-    const quality = balance();
-    app.innerHTML = `<section class="card"><p class="eyebrow">STEP 2 OF 2</p><h2>Choose the fixed teams</h2><p class="help">Tap two players to swap them. Lock requested teams, then shuffle the rest until you are happy.</p><div class="balance"><strong>${quality.label}</strong><br><span class="compact">Strongest ${Math.max(...pairing.pairs.map(p => p.skill))} · Weakest ${Math.min(...pairing.pairs.map(p => p.skill))} · Difference ${quality.spread}</span></div><div class="pair-builder">${pairing.pairs.map((pair, index) => `<article class="pair-card ${pair.locked ? 'locked' : ''}"><div class="pair-card-head"><strong>Team ${index + 1}</strong><span class="pair-strength">Combined ${pair.skill}</span></div><div class="pair-members">${pair.players.map((id, member) => `${member ? '<span class="pair-plus">+</span>' : ''}<button class="player-choice ${selected === id ? 'selected' : ''}" data-player="${id}">${esc(pairing.players[id].name)}<small>Grade ${pairing.players[id].skill}${pairing.players[id].grade ? '' : '*'}</small></button>`).join('')}</div><button class="wide" data-lock="${index}">${pair.locked ? 'Unlock team' : 'Lock requested team'}</button></article>`).join('')}</div><p class="help">* Grade 3 used where no grade was entered.</p><div class="pair-actions"><button data-action="back-setup">Back</button><button data-action="shuffle">Shuffle unlocked</button><button data-action="undo-pairs" ${previousPairs.length ? '' : 'disabled'}>Undo</button><button data-action="reset-pairs">Best balance</button></div><button class="primary wide" data-action="confirm-pairs">Confirm teams and create tournament</button></section>`;
+    const quality = balance(), plan = E.capacity(pairing.pairs.length, pairing.config);
+    app.innerHTML = `<section class="card"><p class="eyebrow">STEP 2 OF 2</p><h2>Choose the fixed teams</h2><p class="pairing-plan">${pairing.config.mode === 'round-robin' ? 'Round robin' : 'Equal matches'} · ${plan.games} matches each · ${pairing.config.game}-minute games · ${plan.minutes} minutes planned</p><p class="help">Tap two players to swap them. Lock requested teams, then shuffle the rest until you are happy.</p><div class="balance"><strong>${quality.label}</strong><br><span class="compact">Strongest ${Math.max(...pairing.pairs.map(p => p.skill))} · Weakest ${Math.min(...pairing.pairs.map(p => p.skill))} · Difference ${quality.spread}</span></div><div class="pair-builder">${pairing.pairs.map((pair, index) => `<article class="pair-card ${pair.locked ? 'locked' : ''}"><div class="pair-card-head"><strong>Team ${index + 1}</strong><span class="pair-strength">Combined ${pair.skill}</span></div><div class="pair-members">${pair.players.map((id, member) => `${member ? '<span class="pair-plus">+</span>' : ''}<button class="player-choice ${selected === id ? 'selected' : ''}" data-player="${id}">${esc(pairing.players[id].name)}<small>Grade ${pairing.players[id].skill}${pairing.players[id].grade ? '' : '*'}</small></button>`).join('')}</div><button class="wide" data-lock="${index}">${pair.locked ? 'Unlock team' : 'Lock requested team'}</button></article>`).join('')}</div><p class="help">* Grade 3 used where no grade was entered.</p><div class="pair-actions"><button data-action="back-setup">Back</button><button data-action="shuffle">Shuffle unlocked</button><button data-action="undo-pairs" ${previousPairs.length ? '' : 'disabled'}>Undo</button><button data-action="reset-pairs">Best balance</button></div><button class="primary wide" data-action="confirm-pairs">Confirm teams and create tournament</button></section>`;
   }
   function snapshotPairs() { previousPairs.push(JSON.parse(JSON.stringify(pairing.pairs))); if (previousPairs.length > 20) previousPairs.shift(); }
   function recalcPairs() { pairing.pairs.forEach((pair, id) => { pair.id = id; pair.skill = pair.players.reduce((sum, player) => sum + pairing.players[player].skill, 0); }); }
@@ -65,12 +127,37 @@
   function roundView() {
     if (state.current === state.rounds.length) return `<section class="card success"><p class="eyebrow">THAT’S A WRAP</p><strong>${state.plan.games} matches each</strong><p>The final team standings are ready.</p><button class="primary wide" data-tab="standings">See final standings</button></section>`;
     const round = state.rounds[state.current];
-    return `<div class="round-heading"><h2>Round ${state.current + 1} <span class="muted">of ${state.rounds.length}</span></h2><span class="pill">${state.plan.games} each</span></div><div class="progress"><div style="width:${state.current / state.rounds.length * 100}%"></div></div><section class="timer-card"><div class="timer-row"><div><div class="eyebrow" style="color:#dbeafe">ROUND TIMER</div><div id="clock" class="clock">${clockText()}</div></div><button data-action="timer">${state.timer?.end ? 'Pause' : state.timer ? 'Resume' : 'Start game'}</button></div><p id="timer-note" aria-live="polite"></p><p>${state.config.change} min changeover between rounds.</p><div class="finish-estimate"><strong id="finish-time"></strong><p id="finish-note"></p></div></section>${round.matches.map((match, index) => `<section class="card court-card"><div class="court-head"><span class="court-number">COURT ${state.config.courtNumbers[index]}</span><span class="muted">Fixed teams</span></div>${matchView(match, 'court-' + index)}</section>`).join('')}<aside class="rest"><h3>${round.resting.length ? 'Resting this round' : 'Every team is on court'}</h3><p>${round.resting.map(id => esc(pairName(state.pairs[id]))).join(' · ')}</p></aside><p id="result-error" class="error" role="alert"></p><button class="primary wide" data-action="advance">${state.current + 1 === state.rounds.length ? 'Save results and finish' : 'Save results and next round'}</button>`;
+    return `${state.config.mode === 'round-robin' ? '<p class="help">Round robin: each opponent once.</p>' : ''}<div class="round-heading"><h2>Round ${state.current + 1} <span class="muted">of ${state.rounds.length}</span></h2><span class="pill">${state.plan.games} each</span></div><div class="progress"><div style="width:${state.current / state.rounds.length * 100}%"></div></div><section class="timer-card"><div class="timer-row"><div><div class="eyebrow" style="color:#dbeafe">ROUND TIMER</div><div id="clock" class="clock">${clockText()}</div></div><button data-action="timer">${state.timer?.end ? 'Pause' : state.timer ? 'Resume' : 'Start game'}</button></div><p id="timer-note" aria-live="polite"></p><p>${state.config.change} min changeover between rounds.</p><div class="finish-estimate"><strong id="finish-time"></strong><p id="finish-note"></p></div></section>${round.matches.map((match, index) => `<section class="card court-card"><div class="court-head"><span class="court-number">COURT ${state.config.courtNumbers[index]}</span><span class="muted">Fixed teams</span></div>${matchView(match, 'court-' + index)}</section>`).join('')}<aside class="rest"><h3>${round.resting.length ? 'Resting this round' : 'Every team is on court'}</h3><p>${round.resting.map(id => esc(pairName(state.pairs[id]))).join(' · ')}</p></aside><p id="result-error" class="error" role="alert"></p><button class="primary wide" data-action="advance">${state.current + 1 === state.rounds.length ? 'Save results and finish' : 'Save results and next round'}</button>`;
   }
   function standingsView() { return `<section class="card"><p class="eyebrow">TEAM STANDINGS</p><h2>${state.current === state.rounds.length ? 'Final results' : 'The story so far'}</h2>${E.standings(state.pairs, state.rounds).map(row => `<div class="stand-row"><span class="rank">${row.rank}</span><div><span class="name">${esc(pairName(row))}</span><small>${row.played}/${state.plan.games} played · ${row.wins}W ${row.draws}D ${row.losses}L</small><small>For ${row.for} · Against ${row.against} · Difference ${row.diff > 0 ? '+' : ''}${row.diff}</small></div><div class="points">${row.points}<small>POINTS</small></div></div>`).join('')}</section>`; }
   function teamsView() { return `<section class="card"><h2>Fixed teams</h2><p class="help">These partners stay together for the whole tournament.</p>${state.pairs.map((pair, i) => `<article class="history-match"><strong>Team ${i + 1}</strong>${teamView(pair.id)}</article>`).join('')}</section>`; }
   function historyView() { return `<section class="card"><h2>Results and schedule</h2>${state.rounds.map((round, ri) => `<details ${ri === Math.max(0, state.current - 1) ? 'open' : ''}><summary>Round ${ri + 1}</summary>${round.matches.map((match, mi) => `<div class="history-match"><span class="court-number">COURT ${state.config.courtNumbers[mi]}</span>${matchView(match)}${match.score ? `<button data-edit="${ri},${mi}">Edit score</button>` : '<span class="muted">Not played yet</span>'}</div>`).join('')}</details>`).join('')}</section>`; }
-  function render() { clearInterval(tick); document.body.classList.add('running'); options.innerHTML = menu(); app.innerHTML = `<nav class="tabs">${[['round','Current round'],['standings','Standings'],['teams','Teams'],['history','Results']].map(([id,label]) => `<button data-tab="${id}" ${tab === id ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>${tab === 'round' ? roundView() : tab === 'standings' ? standingsView() : tab === 'teams' ? teamsView() : historyView()}`; if (tab === 'round' && state.current < state.rounds.length) { updateClock(); tick = setInterval(updateClock, 250); } }
+  function sheetView() {
+    const rows = E.scoreSheet(state.players, state.pairs, state.rounds);
+    return `<section class="card score-sheet-card">
+      <h2>Score sheet</h2>
+      <p class="help">Pairs A to Z, using the first name shown in each pair. Compare this grid with your paper sheet.</p>
+      <p id="sheet-legend" class="help">Large number: competition points (win 2, draw 1, loss 0). Small box: rally points scored. Blank: not played. REST: no match.</p>
+      <p id="sheet-scroll-hint" class="help">Scroll sideways for more rounds. Pair names stay visible.</p>
+      <div class="score-sheet-scroll" role="region" aria-label="Tournament score sheet" aria-describedby="sheet-scroll-hint" tabindex="0">
+        <table class="score-sheet" aria-describedby="sheet-legend">
+          <caption class="sr-only">Competition points and rally scores for each pair, by round</caption>
+          <thead><tr><th scope="col" class="sheet-pair">Pair</th>${state.rounds.map((_, index) => `<th scope="col">Round ${index + 1}</th>`).join('')}<th scope="col" class="sheet-total">Total</th></tr></thead>
+          <tbody>${rows.map(row => `<tr data-sheet-pair="${row.id}">
+            <th scope="row" class="sheet-pair"><span>${esc(row.name)}</span></th>
+            ${row.cells.map((cell, index) => `<td data-sheet-round="${index}" class="sheet-${cell.status}">${cell.status === 'rest'
+              ? '<span class="sheet-rest">REST</span>'
+              : cell.status === 'pending'
+                ? '<div class="sheet-result"><span class="sr-only">Not played</span><span class="sheet-score" aria-hidden="true"></span></div>'
+                : `<div class="sheet-result"><span class="sr-only">Competition points: </span><strong class="sheet-points">${cell.points}</strong><span class="sheet-score"><span class="sr-only">Rally points: </span><span class="sheet-rally-points">${cell.score}</span></span></div>`}</td>`).join('')}
+            <td class="sheet-total"><strong>${row.total}</strong></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <p class="help">Totals count competition points from saved results. Enter or correct scores in Current round or Results.</p>
+    </section>`;
+  }
+  function render() { clearInterval(tick); document.body.classList.add('running'); options.innerHTML = menu(); app.innerHTML = `<nav class="tabs">${[['round','Current round'],['standings','Standings'],['teams','Teams'],['history','Results'],['sheet','Score sheet']].map(([id,label]) => `<button data-tab="${id}" ${tab === id ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>${tab === 'round' ? roundView() : tab === 'standings' ? standingsView() : tab === 'teams' ? teamsView() : tab === 'sheet' ? sheetView() : historyView()}`; if (tab === 'round' && state.current < state.rounds.length) { updateClock(); tick = setInterval(updateClock, 250); } }
   function remaining() { return state.timer?.end ? Math.max(0, state.timer.end - Date.now()) : state.timer?.remaining ?? state.config.game * 60000; }
   function clockText() { const seconds = Math.ceil(remaining() / 1000); return `${String(Math.floor(seconds / 60)).padStart(2,'0')}:${String(seconds % 60).padStart(2,'0')}`; }
   function updateClock() {

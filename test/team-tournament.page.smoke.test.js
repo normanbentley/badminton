@@ -64,6 +64,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 test('fixed-team courtside workflow, persistence, backup and offline use', { timeout: 120000, skip: !browser && !required ? 'no Chrome-like browser found' : false }, async t => {
   assert.ok(browser, 'REQUIRE_BROWSER=1 requires a real browser');
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'junior-doubles-browser-team-'));
+  let serveLegacyCache = false;
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, 'http://localhost').pathname;
     const file = path.resolve(SOURCE, '.' + decodeURIComponent(pathname) + (pathname.endsWith('/') ? 'index.html' : ''));
@@ -71,6 +72,8 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     fs.readFile(file, (err, data) => {
       if (err) { res.writeHead(404).end(); return; }
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+      if (serveLegacyCache && pathname === '/sw.js') data = String(data).replace("'junior-team-doubles-v3'", "'junior-team-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
+      if (serveLegacyCache && path.extname(file) === '.html') data = String(data).replace('<body>', '<body><div id="legacy-cache-marker" hidden>Previous cached version</div>');
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
     });
   });
@@ -121,9 +124,13 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
   }
   async function fill(selector, value) {
     await click(selector);
-    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65, commands: ['selectAll'] });
     await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+    // Explicit selection keeps number fields reliable after mobile touch focus.
+    // Enter text through the real browser input path so input handlers run.
+    await js('document.querySelector(' + JSON.stringify(selector) + ').select()');
     await cdp('Input.insertText', { text: String(value) });
+    assert.equal(await js('document.querySelector(' + JSON.stringify(selector) + ').value'), String(value), 'keyboard fill: ' + selector);
   }
   async function screenshot(name) {
     await js('window.scrollTo(0,0)');
@@ -202,6 +209,50 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     assert.match(await js("document.querySelector('.stand-row').textContent"), /1W 0D 0L.*For 16.*Against 11.*Difference \+5/);
     await screenshot('standings');
   });
+  await t.test('paper grid uses alphabetical pair rows and shows saved points beside boxed rally scores', async () => {
+    const current = await saved();
+    await click('[data-tab="sheet"]');
+    const names = current.pairs.map(pair => pair.players.map(id => current.players[id].name).join(' + ')).sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+    assert.deepEqual(await js("Array.from(document.querySelectorAll('.score-sheet tbody .sheet-pair')).map(el => el.textContent)"), names);
+    assert.equal(await js("document.querySelectorAll('.score-sheet thead th').length"), current.rounds.length + 2);
+    assert.equal(await js("document.querySelectorAll('.score-sheet tbody tr').length"), current.pairs.length);
+    for (const match of current.rounds[0].matches) for (const [side, id] of match.pairs.entries()) {
+      const selector = `[data-sheet-pair="${id}"] [data-sheet-round="0"]`;
+      const points = match.score[side] > match.score[1 - side] ? 2 : match.score[side] === match.score[1 - side] ? 1 : 0;
+      assert.equal(await js(`document.querySelector(${JSON.stringify(selector + ' .sheet-points')}).textContent`), String(points));
+      assert.equal(await js(`document.querySelector(${JSON.stringify(selector + ' .sheet-rally-points')}).textContent`), String(match.score[side]));
+    }
+    assert.equal(await js("document.querySelectorAll('.sheet-pending .sheet-points').length"), 0);
+    assert.equal(await js("document.querySelectorAll('.sheet-pending').length"), 8);
+    assert.equal(await js("document.querySelectorAll('.sheet-pending .sheet-score:empty').length"), 8);
+    assert.deepEqual(await saved(), current, 'opening the sheet never changes event data');
+    assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+  });
+  await t.test('paper grid updates corrected scores and totals while unfinished score drafts stay blank', async () => {
+    const current = await saved(), [a, b] = current.rounds[0].matches[0].pairs;
+    const order = await js("Array.from(document.querySelectorAll('.score-sheet tbody tr')).map(row => row.dataset.sheetPair)");
+    await click('[data-tab="history"]'); await js("window.prompt = () => '21-12'"); await click('[data-edit="0,0"]');
+    await click('[data-tab="sheet"]');
+    for (const [id, points, rally] of [[a, 2, 21], [b, 0, 12]]) {
+      assert.equal(await js(`document.querySelector('[data-sheet-pair="${id}"] [data-sheet-round="0"] .sheet-points').textContent`), String(points));
+      assert.equal(await js(`document.querySelector('[data-sheet-pair="${id}"] [data-sheet-round="0"] .sheet-rally-points').textContent`), String(rally));
+      assert.equal(await js(`document.querySelector('[data-sheet-pair="${id}"] .sheet-total').textContent`), String(points));
+    }
+    assert.deepEqual(await js("Array.from(document.querySelectorAll('.score-sheet tbody tr')).map(row => row.dataset.sheetPair)"), order);
+    await cdp('Emulation.setDeviceMetricsOverride', { width: 1000, height: 800, deviceScaleFactor: 1, mobile: false });
+    await screenshot('score-sheet');
+    await cdp('Emulation.setDeviceMetricsOverride', { ...viewport, width: 360, height: 800 });
+    await click('[data-tab="round"]'); await fill('#court-0-0', 22);
+    const drafted = await saved();
+    await click('[data-tab="sheet"]');
+    assert.equal(await js("document.querySelectorAll('[data-sheet-round=" + '"1"' + "] .sheet-points').length"), 0);
+    assert.deepEqual(await saved(), drafted);
+    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=sheet]')");
+    await click('[data-tab="sheet"]');
+    assert.equal(await js(`document.querySelector('[data-sheet-pair="${a}"] .sheet-total').textContent`), '2');
+    assert.equal((await saved()).drafts['court-0'][0], '22');
+    await click('[data-tab="round"]');
+  });
   let backup;
   await t.test('exports and restores an independent backup and rejects rotating-player backups', async () => {
     await js("window.originalCreateURL = URL.createObjectURL; URL.createObjectURL = blob => { window.exported = blob; return originalCreateURL(blob); }");
@@ -246,7 +297,7 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     assert.deepEqual((await saved()).pairs, fixed);
     await click('[data-tab="standings"]'); assert.match(await js('document.body.textContent'), /Final results/);
     await until("!!navigator.serviceWorker.controller && document.getElementById('offline-status').textContent === 'Ready for offline use.'");
-    const cached = await js("caches.open('junior-team-doubles-v1').then(cache => cache.keys()).then(keys=>keys.map(key=>new URL(key.url).pathname))");
+    const cached = await js("caches.open('junior-team-doubles-v3').then(cache => cache.keys()).then(keys=>keys.map(key=>new URL(key.url).pathname))");
     for (const asset of ['/', '/engine.js', '/app.js', '/icon.svg', '/icon-192.png', '/icon-512.png']) assert.ok(cached.includes(asset), asset);
     assert.ok((await js('caches.keys()')).includes('junior-doubles-v6'));
     await cdp('Network.enable');
@@ -268,6 +319,183 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     await click('[data-action="export"]'); assert.equal((JSON.parse(await js('exported.text()'))).players.length, 4);
     await js('Storage.prototype.setItem = originalSet');
     await screenshot('long-names');
+  });
+  await t.test('round robin previews calculated games, a cap and unused booking time', async () => {
+    await click('[data-action="new"]'); await click('#confirm [value="yes"]');
+    await until("!!document.getElementById('names')");
+    await fill('#names', roster); await fill('#duration', 30); await fill('#change', 2);
+    assert.equal(await js("document.getElementById('mode-round-robin').disabled"), false);
+    await click('#mode-round-robin');
+    assert.equal(await js("document.getElementById('game-field').hidden"), true);
+    assert.equal(await js("document.getElementById('max-game').value"), '10');
+    assert.match(await js("document.getElementById('preview').textContent"), /3 rounds.*8-minute games.*28 of 30 minutes.*2 minutes spare/, await js("localStorage.getItem('junior-team-doubles-setup-v1')"));
+    await fill('#duration', 60);
+    assert.match(await js("document.getElementById('preview').textContent"), /10-minute games.*34 of 60 minutes.*26 minutes spare/);
+    await fill('#max-game', 8);
+    assert.match(await js("document.getElementById('preview').textContent"), /8-minute games.*28 of 60 minutes.*32 minutes spare/);
+    await cdp('Page.reload'); await until("!!document.getElementById('names')");
+    assert.equal(await js("document.getElementById('mode-round-robin').checked"), true);
+    assert.equal(await js("document.getElementById('max-game').value"), '8');
+    await click('#mode-equal');
+    assert.equal(await js("document.getElementById('game').value"), '5', 'the equal-match game setting is retained separately');
+    assert.equal(await js("document.getElementById('max-game-field').hidden"), true);
+    await click('#mode-round-robin'); await fill('#max-game', 10);
+    assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    await screenshot('round-robin-cap');
+  });
+  await t.test('round robin refuses three-minute games and becomes available at the minimum', async () => {
+    await fill('#duration', 13);
+    assert.equal(await js("document.getElementById('mode-round-robin').disabled"), true);
+    assert.equal(await js("document.querySelector('[data-action=suggest]').disabled"), true);
+    assert.match(await js("document.getElementById('preview').textContent"), /at least 19 minutes.*5-minute games/);
+    await screenshot('round-robin-unavailable');
+    await click('#mode-equal');
+    assert.equal(await js("document.querySelector('[data-action=suggest]').disabled"), false);
+    await fill('#duration', 19); await click('#mode-round-robin');
+    assert.match(await js("document.getElementById('preview').textContent"), /5-minute games.*19 of 19 minutes/);
+    await js("document.getElementById('duration').value='13'");
+    await click('[data-action="suggest"]');
+    assert.match(await js("document.getElementById('setup-error').textContent"), /at least 19 minutes/);
+    assert.equal(await js("!!document.querySelector('.pair-builder')"), false);
+  });
+  await t.test('odd team counts and fewer courts change round-robin availability', async () => {
+    await fill('#names', roster + '\nMorgan, 3\nCasey, 3'); await fill('#duration', 30);
+    assert.match(await js("document.getElementById('preview').textContent"), /at least 33 minutes/);
+    await fill('#duration', 35);
+    assert.match(await js("document.getElementById('preview').textContent"), /5 fixed teams.*4 matches each.*5 rounds.*5-minute games.*33 of 35 minutes/);
+    await js("document.getElementById('courts').value='1'; document.getElementById('courts').dispatchEvent(new Event('input',{bubbles:true}))");
+    await fill('#court-numbers', '3');
+    assert.match(await js("document.getElementById('preview').textContent"), /at least 68 minutes/);
+    await fill('#duration', 70);
+    assert.match(await js("document.getElementById('preview').textContent"), /10 rounds.*5-minute games.*68 of 70 minutes/);
+    await click('[data-action="suggest"]'); await click('[data-action="confirm-pairs"]');
+    let current = await saved();
+    assert.equal(current.rounds.length, 10); assert.equal(current.plan.games, 4);
+    assert.ok(current.rounds.every(round => round.matches.length === 1 && round.resting.length === 3));
+    const matchups = current.rounds.flatMap(round => round.matches).map(match => match.pairs.slice().sort().join(':'));
+    assert.equal(new Set(matchups).size, 10);
+  });
+  await t.test('paper grid marks rests and scrolls round columns while pair names remain visible', async () => {
+    await click('[data-tab="sheet"]');
+    assert.equal(await js("document.querySelectorAll('.score-sheet tbody tr').length"), 5);
+    assert.equal(await js("document.querySelectorAll('.score-sheet thead th').length"), 12);
+    assert.equal(await js("Array.from(document.querySelectorAll('.score-sheet tbody tr')).every(row => row.querySelectorAll('td.sheet-rest').length === 6 && row.querySelectorAll('.sheet-pending').length === 4)"), true);
+    assert.equal(await js("document.querySelectorAll('.sheet-rest .sheet-score').length"), 0);
+    assert.equal(await js("document.querySelectorAll('.sheet-points').length"), 0);
+    assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    await screenshot('score-sheet-rests');
+    const rect = await js("(() => { const box=document.querySelector('.score-sheet-scroll'); box.scrollIntoView({block:'center'}); const r=box.getBoundingClientRect(); return {left:r.left,right:r.right,y:r.top+80}; })()");
+    const pinned = await js("document.querySelector('.score-sheet tbody .sheet-pair').getBoundingClientRect().left");
+    await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: rect.right - 12, y: rect.y }] });
+    for (let i = 1; i <= 6; i++) {
+      await cdp('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: rect.right - 12 - i * (rect.right - rect.left - 30) / 6, y: rect.y }] });
+      await delay(20);
+    }
+    await cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await until("document.querySelector('.score-sheet-scroll').scrollLeft > 0");
+    assert.ok(Math.abs(await js("document.querySelector('.score-sheet tbody .sheet-pair').getBoundingClientRect().left") - pinned) < 1);
+    await js("document.querySelector('.score-sheet-scroll').scrollLeft=10000");
+    assert.equal(await js("(() => { const box=document.querySelector('.score-sheet-scroll').getBoundingClientRect(), total=document.querySelector('.score-sheet tbody .sheet-total').getBoundingClientRect(); return total.right<=box.right+1 && total.left>=box.left; })()"), true);
+    await js("document.querySelector('.score-sheet-scroll').scrollLeft=0");
+    await click('[data-tab="round"]');
+  });
+  let robinPairs, robinBackup;
+  await t.test('confirmed round robin uses the computed game length, not the cap or equal-match setting', async () => {
+    await click('[data-action="new"]'); await click('#confirm [value="yes"]');
+    await fill('#names', roster); await fill('#duration', 30);
+    await js("document.getElementById('courts').value='2'; document.getElementById('courts').dispatchEvent(new Event('input',{bubbles:true}))");
+    await fill('#court-numbers', '3, 5');
+    await click('[data-action="suggest"]');
+    assert.match(await js("document.querySelector('.pairing-plan').textContent"), /Round robin.*3 matches each.*8-minute games.*28 minutes planned/);
+    await screenshot('round-robin-pairing');
+    await click('[data-action="confirm-pairs"]');
+    const current = await saved(); robinPairs = current.pairs;
+    assert.equal(current.config.mode, 'round-robin'); assert.equal(current.config.game, 8); assert.equal(current.config.maxGame, 10);
+    assert.equal(current.plan.minutes, 28); assert.equal(current.plan.spare, 2);
+    assert.equal(await js("document.getElementById('clock').textContent"), '08:00');
+    assert.equal(current.rounds.length, 3);
+    const matchups = current.rounds.flatMap(round => round.matches).map(match => match.pairs.slice().sort().join(':'));
+    assert.equal(new Set(matchups).size, 6);
+    assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    await screenshot('round-robin-round');
+    await click('[data-action="timer"]');
+    const deadline = (await saved()).timer.end;
+    await cdp('Page.reload'); await until("!!document.getElementById('clock')");
+    assert.equal((await saved()).timer.end, deadline);
+    await click('[data-action="timer"]');
+  });
+  await t.test('round-robin backups restore their mode, schedule and timer offline', async () => {
+    await js("window.originalCreateURL = URL.createObjectURL; URL.createObjectURL = blob => { window.exported = blob; return originalCreateURL(blob); }");
+    await click('[data-action="export"]'); robinBackup = await js('exported.text()');
+    assert.equal(JSON.parse(robinBackup).config.game, 8);
+    await click('[data-action="new"]'); await click('#confirm [value="yes"]');
+    await js(`(() => { const input = document.getElementById('import-file'), data = new DataTransfer(); data.items.add(new File([${JSON.stringify(robinBackup)}], 'round-robin.json', {type:'application/json'})); input.files = data.files; input.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+    await until("document.getElementById('confirm').open"); await click('#confirm [value="yes"]');
+    assert.deepEqual((await saved()).pairs, robinPairs);
+    assert.deepEqual((await saved()).rounds, JSON.parse(robinBackup).rounds);
+    assert.equal((await saved()).config.game, 8);
+    await until("!!navigator.serviceWorker.controller");
+    await cdp('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+    await cdp('Page.reload'); await until("!!document.getElementById('clock')");
+    assert.equal((await saved()).config.mode, 'round-robin');
+    assert.deepEqual((await saved()).timer, JSON.parse(robinBackup).timer);
+    await cdp('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    await js("document.querySelectorAll('[data-score]').forEach(input => { input.value='10'; input.dispatchEvent(new Event('input',{bubbles:true})); })");
+    await click('[data-action="advance"]'); await click('#confirm [value="yes"]');
+    while ((await saved()).current < (await saved()).rounds.length) {
+      await js("document.querySelectorAll('[data-score]').forEach(input => { input.value='10'; input.dispatchEvent(new Event('input',{bubbles:true})); })");
+      await click('[data-action="advance"]');
+    }
+    assert.deepEqual((await saved()).pairs, robinPairs);
+    await click('[data-tab="standings"]');
+    assert.equal(await js("Array.from(document.querySelectorAll('.stand-row')).every(row => row.textContent.includes('3/3 played'))"), true);
+    assert.match(await js('document.body.textContent'), /Final results/);
+  });
+  await t.test('an existing offline installation receives the new app without losing its tournament', async () => {
+    const before = await saved();
+    await js("navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister())))");
+    await js("caches.delete('junior-team-doubles-v3')");
+    await cdp('Page.navigate', { url: 'about:blank' }); serveLegacyCache = true;
+    await cdp('Page.navigate', { url: base + '/' });
+    await until("!!navigator.serviceWorker.controller && !!document.querySelector('[data-tab=standings]')");
+    await until("caches.has('junior-team-doubles-v1')");
+    await cdp('Page.reload'); await until("!!document.getElementById('legacy-cache-marker')");
+    serveLegacyCache = false;
+    await js('navigator.serviceWorker.getRegistration().then(r => r.update())');
+    await until("caches.has('junior-team-doubles-v3')");
+    await until("caches.has('junior-team-doubles-v1').then(exists => !exists)");
+    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=standings]')");
+    assert.equal(await js("!!document.getElementById('legacy-cache-marker')"), false);
+    assert.deepEqual(await saved(), before);
+    assert.ok((await js('caches.keys()')).includes('junior-doubles-v6'));
+  });
+  await t.test('paper grid remains usable for long names, many pairs and hundreds of rounds', async () => {
+    await js(`(() => {
+      const E=JuniorTeamTournament;
+      const names=Array.from({length:60},(_,i)=>('Player '+String(i).padStart(2,'0')+' '+ 'X'.repeat(50)).slice(0,50));
+      names[0]='Zoe <b> & Amy';
+      const players=E.parsePlayers(names.join(String.fromCharCode(10))), pairs=E.makePairs(players);
+      const config={mode:'equal',courts:5,duration:480,game:1,change:0,courtNumbers:[1,2,3,4,5]};
+      localStorage.setItem('junior-team-doubles-v1',JSON.stringify({version:1,kind:'fixed-pairs',players,pairs,config,...E.schedule(pairs,config),current:0,timer:null,drafts:{}}));
+    })()`);
+    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=sheet]')");
+    await click('[data-tab="sheet"]');
+    assert.equal(await js("document.querySelectorAll('.score-sheet tbody tr').length"), 30);
+    assert.equal(await js("document.querySelectorAll('.score-sheet thead th').length"), 482);
+    assert.equal(await js("document.querySelectorAll('.score-sheet tbody td[data-sheet-round]').length"), 14400);
+    assert.equal(await js("document.querySelector('.score-sheet tbody').textContent.includes('Zoe <b> & Amy')"), true);
+    assert.equal(await js("document.querySelectorAll('.score-sheet .sheet-pair b').length"), 0, 'names remain text');
+    assert.equal(await js('document.documentElement.scrollWidth <= innerWidth'), true);
+    await js("document.querySelector('.score-sheet-scroll').scrollTop=100000; document.querySelector('.score-sheet-scroll').scrollLeft=100000");
+    assert.equal(await js("(() => { const box=document.querySelector('.score-sheet-scroll').getBoundingClientRect(), header=document.querySelector('.score-sheet thead th').getBoundingClientRect(); return header.top>=box.top && header.top<box.top+3; })()"), true);
+    assert.equal(await js("document.querySelectorAll('.score-sheet tbody tr:last-child td').length"), 481);
+    await screenshot('score-sheet-large');
+    await until("!!navigator.serviceWorker.controller");
+    await cdp('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=sheet]')");
+    await click('[data-tab="sheet"]');
+    assert.equal(await js("document.querySelectorAll('.score-sheet tbody tr').length"), 30);
+    await cdp('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   });
   assert.deepEqual(errors, []);
 });

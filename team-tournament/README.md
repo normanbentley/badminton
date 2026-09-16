@@ -45,6 +45,60 @@ completed event you want to keep; this app does not maintain a separate archive
 of previous tournaments. Single-event backups include fixed teams, results,
 score drafts, court numbers and timer state. Data does not sync between devices.
 
+## Choosing the schedule
+
+Equal matches is the default. Set game length and available time as before;
+the app fits the largest equal match count it can, and opponents may repeat.
+Existing tournaments and backups without a mode keep this behavior.
+
+Round robin schedules every fixed team against every other team exactly once.
+Every team gets one match per opponent. Odd team counts have rests, and limited
+courts can require extra rounds. Matchups are spread across the smallest number
+of rounds that fits both the teams and court capacity.
+
+For round robin, set the available time, changeovers and a game cap. The cap
+defaults to 10 minutes and accepts whole minutes from 5 to 60. Game length is the
+largest whole number of minutes that fits all rounds and changeovers, up to the
+cap. Available time is a maximum; the app shows the planned duration and spare
+time rather than stretching games or adding repeat matches to fill the booking.
+
+Games must last at least 5 minutes. If those games cannot fit, the round-robin
+option is unavailable and the page states the minimum time needed. Increase
+time, add courts or choose Equal matches. If an already selected round robin
+stops fitting after an edit, it stays selected with an explanation and tournament
+creation is blocked until the settings fit again or another mode is chosen.
+
+For example, 4 teams on 2 courts need 3 rounds. With 2-minute changeovers:
+
+- 30 minutes available gives 8-minute games, 28 minutes planned and 2 spare.
+- 60 minutes available with the default cap gives 10-minute games, 34 minutes
+  planned and 26 spare.
+- 13 minutes available would require 3-minute games, so round robin is unavailable.
+  The minimum is 19 minutes for 5-minute games.
+
+The pairing review repeats the chosen format, game length and planned duration.
+Confirmed tournaments, timers and backups keep the calculated game length and
+scheduling mode. Scoring and standings work the same in both formats.
+
+## Paper score sheet
+
+Open the Score sheet tab after confirming the teams to see the grid to copy
+onto paper. It has one row per fixed pair and a column for every scheduled
+round, followed by a total. Rows are alphabetical by the displayed pair name;
+the order of partners within each pair stays unchanged.
+
+Each saved result shows large competition points (win 2, draw 1, loss 0), with
+the team's rally points in a small outlined box. For example, a 21-12 win shows
+2 with 21 in the box. A nil-all draw shows 1 with 0 in the box. REST marks a
+round without a match; scheduled games without saved results stay blank.
+Totals add competition points only. Score drafts do not appear as results.
+
+The grid reflects score corrections immediately when reopened. It uses the
+same saved tournament as the scoring and standings screens, including after
+backup import, refresh and offline use. Enter or correct scores through Current
+round or Results. On a phone, swipe sideways to see later rounds; pair names
+stay visible, and column headings stay visible when scrolling down a long list.
+
 ## Installation and verification
 
 The application includes the SVG favicon and the supplied 192 and 512 pixel PNG
@@ -67,5 +121,9 @@ Set `REQUIRE_BROWSER=1` when running the page tests to require Chrome or Edge
 instead of skipping if no browser is found. Set `CHROME_PATH` if needed. In
 PowerShell, use `$env:REQUIRE_BROWSER='1'` before the command. Tests exercise
 phone touch controls, locked shuffles, swaps and undo, scoring and corrections,
-save failures, backups, refresh and offline reload. Screenshots are written to
-the system temporary directory, outside the repository.
+save failures, backups, refresh and offline reload. Round-robin checks cover
+unique opponents, court limits, odd team counts, minimum and capped game lengths,
+mode switching, saved settings and upgrades from the previous offline cache.
+Score-sheet tests cover alphabetical names, wins, draws, losses, rests, blanks,
+corrections, totals, mobile scrolling, long names and the maximum-size grid.
+Screenshots are written to the system temporary directory, outside the repository.
