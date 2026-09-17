@@ -72,7 +72,7 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     fs.readFile(file, (err, data) => {
       if (err) { res.writeHead(404).end(); return; }
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-      if (serveLegacyCache && pathname === '/sw.js') data = String(data).replace("'junior-team-doubles-v3'", "'junior-team-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
+      if (serveLegacyCache && pathname === '/sw.js') data = String(data).replace("'junior-team-doubles-v4'", "'junior-team-doubles-v1'").replace('.then(() => self.skipWaiting())', '');
       if (serveLegacyCache && path.extname(file) === '.html') data = String(data).replace('<body>', '<body><div id="legacy-cache-marker" hidden>Previous cached version</div>');
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
     });
@@ -115,6 +115,7 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
   }
   async function until(expression) { for (let i = 0; i < 100; i++) { if (await js(expression)) return; await delay(50); } assert.fail('Timed out: ' + expression); }
   async function click(selector) {
+    if (selector === '[data-tab="sheet"]' && !await js("!!document.querySelector('[data-tab=sheet]')")) await click('[data-tab="standings"]');
     const needsMenu = await js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); const menu = el?.closest('#tournament-options'); return !!menu && !menu.open && !el.closest('summary'); })()`);
     if (needsMenu) await click('#tournament-options > summary');
     const point = await js(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw Error('Missing control: ' + ${JSON.stringify(selector)}); el.scrollIntoView({ block: 'center' }); const rect = el.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; })()`);
@@ -184,6 +185,94 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     assert.match(await js("document.getElementById('finish-time').textContent"), /\d{1,2}:\d{2}\s*(am|pm)/i);
     await screenshot('round');
   });
+  await t.test('next-round preview matches the schedule and timer aids survive refresh', async () => {
+    const original = await saved();
+    await click('.next-round > summary');
+    const preview = await js(`document.querySelector('.next-round').textContent`);
+    for (const match of original.rounds[1].matches) for (const id of match.pairs.flatMap(id => original.pairs[id].players)) assert.ok(preview.includes(original.players[id].name));
+    assert.deepEqual(await js(`Array.from(document.querySelectorAll('.next-round .court-number')).map(el => el.textContent)`), original.rounds[1].matches.map((_, i) => 'COURT ' + original.config.courtNumbers[i]));
+    assert.match(await js(`document.getElementById('finish-time').textContent`), /Estimated finish/);
+    const mock = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+      window.wakeRequests = 0; window.wakeReleases = 0; window.buzzes = 0; window.tones = 0;
+      const oscillator = AudioContext.prototype.createOscillator;
+      AudioContext.prototype.createOscillator = function() { window.tones++; return oscillator.call(this); };
+      Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => {
+        window.wakeRequests++; const lock = new EventTarget(); lock.released = false;
+        lock.release = async () => { lock.released = true; window.wakeReleases++; lock.dispatchEvent(new Event('release')); }; return lock;
+      } } });
+      Object.defineProperty(navigator, 'vibrate', { configurable: true, value: () => { window.buzzes++; return true; } });
+    ` });
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
+    await click('.timer-tools > summary');
+    await click('#sound-alert');
+    await click('[data-action="test-alert"]');
+    assert.equal(await js('window.buzzes'), 1);
+    await until('window.tones === 3');
+    await screenshot('timer-settings');
+    await click('[data-action="timer"]');
+    await until(`window.wakeRequests === 1`);
+    assert.match(await js(`document.getElementById('wake-status').textContent`), /Keeping screen awake/);
+    await click('[data-action="timer"]');
+    await until(`window.wakeReleases === 1`);
+    await js(`navigator.wakeLock.request = async () => { throw Error('Battery saver'); }`);
+    await click('[data-action="timer"]');
+    await until(`document.getElementById('wake-status').textContent.includes('unavailable')`);
+    assert.ok((await saved()).timer.end > Date.now(), 'wake-lock rejection must not stop the timer');
+    await js(`(() => { const s = JSON.parse(localStorage.getItem('junior-team-doubles-v1')); s.timer = { remaining: 1000, end: Date.now() + 1000 }; localStorage.setItem('junior-team-doubles-v1', JSON.stringify(s)); })()`);
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
+    assert.equal(await js(`document.getElementById('sound-alert').checked`), true);
+    await until(`document.getElementById('clock').textContent === '00:00'`);
+    await until(`window.buzzes === 1`);
+    assert.equal((await saved()).timer.alerted, true);
+    await click('[data-tab="teams"]'); await click('[data-tab="round"]');
+    assert.equal(await js('window.buzzes'), 1, 'rerender must not repeat the alert');
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
+    assert.equal(await js('window.buzzes'), 0, 'refresh must not replay an expired alert');
+    await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: mock.identifier });
+    await js(`localStorage.setItem('junior-team-doubles-v1', ${JSON.stringify(JSON.stringify(original))}); localStorage.removeItem('junior-team-doubles-v1-preferences')`);
+    await cdp('Page.reload'); await until(`!!document.getElementById('clock')`);
+  });
+  await t.test('timer expiry alerts once even while viewing standings and releases screen awake', async () => {
+    const original = await saved();
+    const mock = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+      window.buzzes=0;window.tones=0;window.wakeReleases=0;
+      const osc=AudioContext.prototype.createOscillator;
+      AudioContext.prototype.createOscillator=function(){window.tones++;return osc.call(this)};
+      Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{window.buzzes++;return true}});
+      Object.defineProperty(navigator,'wakeLock',{configurable:true,value:{request:async()=>{const lock=new EventTarget();lock.released=false;lock.release=async()=>{lock.released=true;window.wakeReleases++;lock.dispatchEvent(new Event('release'))};return lock}}});
+    ` });
+    await cdp('Page.reload'); await until("!!document.getElementById('clock')");
+    await click('.timer-tools > summary'); await click('#sound-alert'); await click('[data-action="timer"]');
+    await click('[data-tab="standings"]');
+    await js('window.realNow=Date.now;Date.now=()=>realNow()+3600000');
+    await until('window.buzzes === 1'); await until('window.tones === 3'); await until('window.wakeReleases === 1');
+    assert.equal((await saved()).timer.alerted, true);
+    await click('[data-tab="round"]'); await click('[data-tab="teams"]');
+    assert.equal(await js('window.buzzes'), 1);
+    await js('Date.now=realNow');
+    await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: mock.identifier });
+    await js('localStorage.setItem("junior-team-doubles-v1",' + JSON.stringify(JSON.stringify(original)) + ');localStorage.removeItem("junior-team-doubles-v1-preferences")');
+    await cdp('Page.reload'); await until("!!document.getElementById('clock')");
+  });
+  await t.test('an archived running event resumes paused and failed restoration keeps the active event', async () => {
+    const before = await saved();
+    await click('[data-action="timer"]'); const running = await saved();
+    await click('[data-action="archive"]');
+    const snapshot = await js("JSON.parse(localStorage.getItem('junior-team-doubles-v1-history'))[0].tournament");
+    assert.equal(snapshot.timer.end, null); assert.ok(snapshot.timer.remaining > 0 && snapshot.timer.remaining <= running.timer.remaining);
+    await click('[data-action="close-archive"]');await click('[data-action="timer"]');
+    const active = await saved();
+    await click('[data-action="archive"]');
+    await js("window.originalSet=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='junior-team-doubles-v1')throw Error('quota');return originalSet.call(this,key,value)}");
+    await click('[data-open-archive="1"]'); await click('#confirm [value="yes"]');
+    assert.deepEqual(await saved(), active);
+    assert.match(await js("document.getElementById('storage-warning').textContent"), /restored tournament could not be saved/);
+    await js('Storage.prototype.setItem=originalSet');
+    await click('[data-open-archive="1"]'); await click('#confirm [value="yes"]');
+    assert.equal((await saved()).timer.end, null); assert.deepEqual((await saved()).pairs, before.pairs);
+    await js('localStorage.setItem("junior-team-doubles-v1",' + JSON.stringify(JSON.stringify(before)) + ')');
+    await cdp('Page.reload'); await until("!!document.getElementById('clock')");
+  });
   await t.test('drafts and running or paused timers survive refresh, early finish needs confirmation', async () => {
     await fill('#court-0-0', 15); await fill('#court-0-1', 10); await fill('#court-1-0', 8); await fill('#court-1-1', 8);
     await click('[data-action="timer"]'); const deadline = (await saved()).timer.end;
@@ -247,11 +336,56 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     await click('[data-tab="sheet"]');
     assert.equal(await js("document.querySelectorAll('[data-sheet-round=" + '"1"' + "] .sheet-points').length"), 0);
     assert.deepEqual(await saved(), drafted);
-    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=sheet]')");
+    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=standings]')");
     await click('[data-tab="sheet"]');
     assert.equal(await js(`document.querySelector('[data-sheet-pair="${a}"] .sheet-total').textContent`), '2');
     assert.equal((await saved()).drafts['court-0'][0], '22');
     await click('[data-tab="round"]');
+  });
+  await t.test('four main tabs combine ranking and sheet, with help collapsed and the grid near the top', async () => {
+    await click('[data-tab="standings"]');
+    assert.equal(await js("document.querySelectorAll('.tabs > button').length"), 4);
+    assert.deepEqual(await js("Array.from(document.querySelectorAll('.tabs > button')).map(button => button.textContent)"), ['Current round', 'Standings', 'Teams', 'Matches']);
+    assert.equal(await js("document.querySelector('.tabs [data-tab=sheet]')"), null);
+    assert.equal(await js("document.querySelector('.standings-switch [data-tab=standings]').getAttribute('aria-pressed')"), 'true');
+    await click('[data-tab="sheet"]');
+    assert.equal(await js("document.querySelector('.tabs [data-tab=standings]').getAttribute('aria-current')"), 'page');
+    assert.equal(await js("document.querySelector('.sheet-help').open"), false);
+    await js('window.scrollTo(0,0)');
+    assert.ok(await js("document.querySelector('.score-sheet-scroll').getBoundingClientRect().top < 400"), 'grid should start in the upper half of a phone screen');
+    await click('.sheet-help > summary');
+    assert.equal(await js("document.querySelector('.sheet-help').open"), true);
+    assert.match(await js("document.querySelector('.sheet-help').textContent"), /win 2, draw 1, loss 0/);
+    await click('.sheet-help > summary'); await screenshot('combined-score-sheet');
+    await click('[data-tab="round"]');
+  });
+  await t.test('undo reopens a round with its scores preserved as drafts, and can be cancelled', async () => {
+    const before = await saved();
+    await click('[data-action="undo-round"]'); await click('#confirm [value="cancel"]');
+    assert.deepEqual(await saved(), before);
+    await click('[data-action="undo-round"]'); await click('#confirm [value="yes"]');
+    assert.equal((await saved()).current, before.current - 1);
+    assert.equal((await saved()).timer.remaining, 0);
+    assert.equal(await js("document.getElementById('court-0-0').value"), String(before.rounds[before.current - 1].matches[0].score[0]));
+    await click('[data-tab="sheet"]');
+    assert.equal(await js("document.querySelectorAll('.sheet-played').length"), 0);
+    await cdp('Page.reload'); await until("!!document.getElementById('clock')");
+    await click('[data-action="advance"]');
+    assert.deepEqual((await saved()).rounds, before.rounds);
+    assert.deepEqual((await saved()).pairs, before.pairs);
+  });
+  await t.test('installation is available from the menu and manifest has independent standalone identity', async () => {
+    await js("window.dispatchEvent(new Event('appinstalled'))");
+    await click('[data-action="install"]');
+    assert.equal(await js("document.getElementById('install-help').open"), true);
+    assert.match(await js("document.getElementById('install-help').textContent"), /Safari.*Add to Home Screen/s);
+    await click('#install-help button');
+    const manifest = await js("fetch('manifest.webmanifest').then(r=>r.json())");
+    assert.equal(manifest.display, 'standalone'); assert.equal(manifest.scope, './'); assert.equal(manifest.id, './');
+    for (const icon of manifest.icons) assert.equal(await js('fetch(' + JSON.stringify(icon.src) + ').then(r=>r.status)'), 200);
+    await js("window.installAsked=0; const e=new Event('beforeinstallprompt',{cancelable:true});e.prompt=async()=>{window.installAsked++};e.userChoice=Promise.resolve({outcome:'dismissed'});window.dispatchEvent(e)");
+    await click('[data-action="install"]'); assert.equal(await js('window.installAsked'), 1);
+    assert.equal(await js("document.getElementById('install-help').open"), false);
   });
   let backup;
   await t.test('exports and restores an independent backup and rejects rotating-player backups', async () => {
@@ -297,7 +431,7 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     assert.deepEqual((await saved()).pairs, fixed);
     await click('[data-tab="standings"]'); assert.match(await js('document.body.textContent'), /Final results/);
     await until("!!navigator.serviceWorker.controller && document.getElementById('offline-status').textContent === 'Ready for offline use.'");
-    const cached = await js("caches.open('junior-team-doubles-v3').then(cache => cache.keys()).then(keys=>keys.map(key=>new URL(key.url).pathname))");
+    const cached = await js("caches.open('junior-team-doubles-v4').then(cache => cache.keys()).then(keys=>keys.map(key=>new URL(key.url).pathname))");
     for (const asset of ['/', '/engine.js', '/app.js', '/icon.svg', '/icon-192.png', '/icon-512.png']) assert.ok(cached.includes(asset), asset);
     assert.ok((await js('caches.keys()')).includes('junior-doubles-v6'));
     await cdp('Network.enable');
@@ -451,10 +585,47 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     assert.equal(await js("Array.from(document.querySelectorAll('.stand-row')).every(row => row.textContent.includes('3/3 played'))"), true);
     assert.match(await js('document.body.textContent'), /Final results/);
   });
+  await t.test('history keeps completed events, exports them and restores fixed pairs with paused timers', async () => {
+    const before = await saved();
+    await click('[data-action="archive"]');
+    assert.ok(await js("document.querySelectorAll('.archive-entry').length") > 0);
+    assert.match(await js('document.body.textContent'), /Tournament history/);
+    const history = await js("JSON.parse(localStorage.getItem('junior-team-doubles-v1-history'))");
+    assert.deepEqual(history[0].tournament.pairs, before.pairs);
+    await js("window.originalCreateURL=URL.createObjectURL; URL.createObjectURL=blob=>{window.exported=blob; return originalCreateURL(blob)}");
+    await click('[data-export-archive="0"]');
+    assert.deepEqual(JSON.parse(await js('exported.text()')), history[0].tournament);
+    await click('[data-open-archive="0"]'); await click('#confirm [value="yes"]');
+    assert.deepEqual((await saved()).pairs, before.pairs);
+    assert.deepEqual((await saved()).rounds, before.rounds);
+    assert.match(await js('document.body.textContent'), /Final results/);
+    await click('[data-action="archive"]');
+    const count = await js("document.querySelectorAll('.archive-entry').length");
+    await click('[data-delete-archive="0"]'); await click('#confirm [value="cancel"]');
+    assert.equal(await js("document.querySelectorAll('.archive-entry').length"), count);
+    await click('[data-delete-archive="0"]'); await click('#confirm [value="yes"]');
+    assert.equal(await js("document.querySelectorAll('.archive-entry').length"), count - 1);
+    assert.deepEqual((await saved()).pairs, before.pairs);
+    await screenshot('tournament-history');
+    await click('[data-action="close-archive"]');
+  });
+  await t.test('history save failures prevent replacing an event, and another app history stays untouched', async () => {
+    const before = await saved();
+    await js("localStorage.setItem('junior-doubles-v1-history','other-history');window.originalSet=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='junior-team-doubles-v1-history')throw Error('quota');return originalSet.call(this,key,value)}");
+    await click('[data-action="new"]'); await click('#confirm [value="yes"]');
+    assert.deepEqual(await saved(), before);
+    assert.match(await js("document.getElementById('storage-warning').textContent"), /history could not be saved/);
+    await js('Storage.prototype.setItem=originalSet');
+    await click('[data-action="new"]'); await click('#confirm [value="yes"]');
+    assert.equal(await js("!!document.getElementById('names')"), true);
+    await click('[data-action="archive"]'); await click('[data-open-archive="0"]'); await click('#confirm [value="yes"]');
+    assert.deepEqual((await saved()).pairs, before.pairs);
+    assert.equal(await js("localStorage.getItem('junior-doubles-v1-history')"), 'other-history');
+  });
   await t.test('an existing offline installation receives the new app without losing its tournament', async () => {
     const before = await saved();
     await js("navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister())))");
-    await js("caches.delete('junior-team-doubles-v3')");
+    await js("caches.delete('junior-team-doubles-v4')");
     await cdp('Page.navigate', { url: 'about:blank' }); serveLegacyCache = true;
     await cdp('Page.navigate', { url: base + '/' });
     await until("!!navigator.serviceWorker.controller && !!document.querySelector('[data-tab=standings]')");
@@ -462,7 +633,7 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     await cdp('Page.reload'); await until("!!document.getElementById('legacy-cache-marker')");
     serveLegacyCache = false;
     await js('navigator.serviceWorker.getRegistration().then(r => r.update())');
-    await until("caches.has('junior-team-doubles-v3')");
+    await until("caches.has('junior-team-doubles-v4')");
     await until("caches.has('junior-team-doubles-v1').then(exists => !exists)");
     await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=standings]')");
     assert.equal(await js("!!document.getElementById('legacy-cache-marker')"), false);
@@ -478,7 +649,7 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
       const config={mode:'equal',courts:5,duration:480,game:1,change:0,courtNumbers:[1,2,3,4,5]};
       localStorage.setItem('junior-team-doubles-v1',JSON.stringify({version:1,kind:'fixed-pairs',players,pairs,config,...E.schedule(pairs,config),current:0,timer:null,drafts:{}}));
     })()`);
-    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=sheet]')");
+    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=standings]')");
     await click('[data-tab="sheet"]');
     assert.equal(await js("document.querySelectorAll('.score-sheet tbody tr').length"), 30);
     assert.equal(await js("document.querySelectorAll('.score-sheet thead th').length"), 482);
@@ -492,10 +663,28 @@ test('fixed-team courtside workflow, persistence, backup and offline use', { tim
     await screenshot('score-sheet-large');
     await until("!!navigator.serviceWorker.controller");
     await cdp('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
-    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=sheet]')");
+    await cdp('Page.reload'); await until("!!document.querySelector('[data-tab=standings]')");
     await click('[data-tab="sheet"]');
     assert.equal(await js("document.querySelectorAll('.score-sheet tbody tr').length"), 30);
     await cdp('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  });
+  await t.test('stale tabs cannot overwrite newer scores or history, and can reload the latest event', async () => {
+    await click('[data-tab="round"]');
+    const before=await saved(), newer=structuredClone(before);
+    newer.rounds[0].matches.forEach(match => { match.score=[21,12]; });newer.current=1;newer.drafts={};
+    await js('localStorage.setItem("junior-team-doubles-v1",' + JSON.stringify(JSON.stringify(newer)) + ')');
+    await fill('#court-0-0', 8);
+    assert.deepEqual(await saved(), newer, 'save must check for changes even before a storage event arrives');
+    assert.match(await js("document.getElementById('storage-warning').textContent"), /changed in another tab/);
+    await click('[data-action="new"]');
+    assert.equal(await js("document.getElementById('confirm').open"), false);
+    await click('[data-action="reload-latest"]');await until("!!document.getElementById('clock')");
+    assert.equal((await saved()).current, 1);
+    await fill('#court-0-0', 8);assert.equal((await saved()).drafts['court-0'][0], '8');
+    await js("localStorage.setItem('junior-team-doubles-v1-history','[]');window.dispatchEvent(new StorageEvent('storage',{key:'junior-team-doubles-v1-history'}))");
+    await click('[data-action="new"]');
+    assert.equal(await js("document.getElementById('confirm').open"), false);
+    assert.equal(await js("localStorage.getItem('junior-team-doubles-v1-history')"), '[]');
   });
   assert.deepEqual(errors, []);
 });

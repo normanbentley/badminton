@@ -267,6 +267,22 @@
     const deadline = s.startedAt ? s.startedAt + s.config.duration * 60000 : null;
     return { finish, deadline, overrun: deadline ? Math.max(0, finish - deadline) : 0 };
   }
-  const api = { parsePlayers, makePairs, capacity, courtNumbers, schedule, standings, validScore, validate, finishEstimate, roundRobinError, scoreSheet };
+  function archiveTournament(entries, tournament, savedAt, id) {
+    const copy = JSON.parse(JSON.stringify(tournament));
+    if (copy.timer?.end) copy.timer = { remaining: Math.max(0, copy.timer.end - savedAt), end: null };
+    const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value;
+    // Resting lists are derived and can change order when an old backup is validated.
+    const key = t => JSON.stringify(canonical([t.pairs, t.players, t.config, t.rounds.map(r => r.matches), t.current, t.timer, t.drafts || {}, t.startedAt, t.readyAt]));
+    if (entries.some(entry => key(entry.tournament) === key(copy))) return entries;
+    return [{ id, savedAt, tournament: copy }, ...entries];
+  }
+  function reopenLastRound(state) {
+    if (!state.current) throw Error('No completed round to reopen.');
+    const copy = structuredClone(state); copy.current--; copy.drafts = {};
+    copy.rounds[copy.current].matches.forEach((match, i) => { copy.drafts['court-' + i] = match.score.map(String); match.score = null; });
+    copy.timer = { remaining: 0, end: null }; delete copy.readyAt;
+    return validate(copy);
+  }
+  const api = { parsePlayers, makePairs, capacity, courtNumbers, schedule, standings, validScore, validate, finishEstimate, roundRobinError, scoreSheet, archiveTournament, reopenLastRound };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.JuniorTeamTournament = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

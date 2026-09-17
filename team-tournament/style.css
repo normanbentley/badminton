@@ -111,3 +111,5 @@ button,summary,a{-webkit-tap-highlight-color:transparent}
 .score-sheet .sheet-rest{font-size:10px;letter-spacing:.5px;color:var(--muted)}
 .score-sheet td.sheet-rest{background:#f4f6f1;min-width:82px;height:68px}
 @media(min-width:600px){.score-sheet .sheet-pair{width:184px;min-width:184px}.score-sheet .sheet-pair>span{width:160px}}
+
+.standings-switch{display:flex;gap:4px;margin:-6px 0 14px}.standings-switch button{flex:1;background:transparent;border:1px solid var(--line)}.standings-switch [aria-pressed="true"]{background:#dbeafe;border-color:#93c5fd;color:#1e40af}.sheet-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.sheet-heading h2{margin:0}.sheet-help{font-size:12px}.sheet-help summary{min-height:44px;padding:12px 4px;color:var(--green)}.sheet-help[open]{flex:1}.sheet-heading:has(.sheet-help[open]){display:block}.sheet-help p{font-size:13px;line-height:1.5}.sheet-help summary:focus-visible{outline:3px solid #d19a24;outline-offset:3px}

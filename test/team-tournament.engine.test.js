@@ -367,3 +367,33 @@ test('score sheets agree with standings for both scheduling modes and large grou
     }
   }
 });
+
+
+test('reopening a completed round preserves fixed pairs and moves scores into drafts', () => {
+  for (const state of [eventState(), robinState()]) {
+    state.rounds[0].matches.forEach(match => { match.score = [21, 17]; }); state.current = 1;
+    state.drafts = { 'court-0': ['9', '8'] }; state.readyAt = 12345;
+    const before = structuredClone(state), reopened = E.reopenLastRound(state);
+    assert.deepEqual(state, before); assert.deepEqual(reopened.pairs, before.pairs);
+    assert.equal(reopened.current, 0); assert.equal(reopened.readyAt, undefined);
+    assert.deepEqual(reopened.drafts['court-0'], ['21', '17']);
+    assert.ok(reopened.rounds[0].matches.every(match => match.score === null));
+    assert.ok(E.standings(reopened.pairs, reopened.rounds).every(row => row.played === 0));
+    assert.deepEqual(E.validate(reopened), reopened);
+  }
+  assert.throws(() => E.reopenLastRound(eventState()), /No completed round/);
+});
+
+test('team archives freeze timers, retain fixed partnerships and deduplicate equivalent copies', () => {
+  const state = eventState(); state.timer = { remaining: 300000, end: 1200000 };
+  const before = structuredClone(state), entries = E.archiveTournament([], state, 1000000, 'first');
+  assert.deepEqual(state, before); assert.deepEqual(entries[0].tournament.timer, { remaining: 200000, end: null });
+  assert.deepEqual(entries[0].tournament.pairs, state.pairs);
+  assert.equal(E.archiveTournament(entries, entries[0].tournament, 1100000, 'copy'), entries);
+  const changed = structuredClone(entries[0].tournament);
+  [changed.pairs[0].players[0], changed.pairs[1].players[0]] = [changed.pairs[1].players[0], changed.pairs[0].players[0]];
+  assert.equal(E.archiveTournament(entries, changed, 1100000, 'different-partners').length, 2);
+  changed.rounds[0].matches[0].score = [20, 15];
+  assert.equal(E.archiveTournament(entries, changed, 1100000, 'corrected').length, 2);
+  assert.deepEqual(E.validate(structuredClone(entries[0].tournament)), entries[0].tournament);
+});

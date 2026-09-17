@@ -37,13 +37,26 @@ Start or pause the round timer when courts are ready. It persists across refresh
 Finishing a running or paused round early requires confirmation. Estimated finish
 includes remaining games and changeovers and updates with delays or pauses.
 The configured budget starts at confirmation; real-world delays may extend it.
-The timer shows a visible message at time. Keep the page visible to see it.
+Timer settings can keep the screen awake while running and enable a three-tone
+end alert with vibration where supported. Keep the page visible for alerts and
+use Test alert to check media volume. Settings stay on this browser. Screen-awake
+failures are shown and do not stop the timer. Alerts also work on the other app
+views, and do not repeat after refresh.
 
-Results shows the current tournament's round history and lets you correct scores.
-A new tournament or restored backup replaces the current event. Export each
-completed event you want to keep; this app does not maintain a separate archive
-of previous tournaments. Single-event backups include fixed teams, results,
-score drafts, court numbers and timer state. Data does not sync between devices.
+Matches shows round history and lets you correct scores. Up next previews the
+following round, including courts and resting pairs. Undo last round is in the
+options menu; it returns recorded scores to editable drafts and removes those
+points from standings until saved again.
+
+Tournament history in the options menu keeps events when you finish them, start
+a new one, import a backup or open history. Saved copies can be resumed, exported
+or deleted without changing the active event. Saved timers resume paused.
+Distinct versions of imported events remain separate. Export backups for copies
+outside this browser. A history save failure blocks replacing the current event.
+
+Single-event backups include fixed teams, results, score drafts, court numbers
+and timer state. Data does not sync between devices. If another tab changes the
+current event or history, this tab blocks writes and offers Reload latest.
 
 ## Choosing the schedule
 
@@ -82,7 +95,7 @@ scheduling mode. Scoring and standings work the same in both formats.
 
 ## Paper score sheet
 
-Open the Score sheet tab after confirming the teams to see the grid to copy
+Open Standings, then Score sheet after confirming the teams to see the grid to copy
 onto paper. It has one row per fixed pair and a column for every scheduled
 round, followed by a total. Rows are alphabetical by the displayed pair name;
 the order of partners within each pair stays unchanged.
@@ -93,17 +106,21 @@ the team's rally points in a small outlined box. For example, a 21-12 win shows
 round without a match; scheduled games without saved results stay blank.
 Totals add competition points only. Score drafts do not appear as results.
 
+Ranking and Score sheet share the Standings tab. How to read reveals the legend
+and guidance; it stays collapsed by default so the grid is immediately visible.
 The grid reflects score corrections immediately when reopened. It uses the
 same saved tournament as the scoring and standings screens, including after
 backup import, refresh and offline use. Enter or correct scores through Current
-round or Results. On a phone, swipe sideways to see later rounds; pair names
+round or Matches. On a phone, swipe sideways to see later rounds; pair names
 stay visible, and column headings stay visible when scrolling down a long list.
 
 ## Installation and verification
 
 The application includes the SVG favicon and the supplied 192 and 512 pixel PNG
 application icons. The Apple touch icon, manifest and offline cache reference
-present files. Serve over HTTPS or localhost and wait for Ready for offline use
+present files. Install app in the options menu uses the browser installation
+prompt when available, otherwise it explains home-screen installation.
+Serve over HTTPS or localhost and wait for Ready for offline use
 before going offline. It also opens directly from a local file without caching.
 
 Run the focused checks from the repository root:
@@ -127,3 +144,9 @@ mode switching, saved settings and upgrades from the previous offline cache.
 Score-sheet tests cover alphabetical names, wins, draws, losses, rests, blanks,
 corrections, totals, mobile scrolling, long names and the maximum-size grid.
 Screenshots are written to the system temporary directory, outside the repository.
+
+Additional tests cover the combined views, collapsed help, installation guidance,
+timer preferences, audio graph creation, wake-lock requests and failures, alerts
+away from the round view, undo, history and stale-tab write protection. Browser
+tests substitute wake-lock and vibration APIs; physical device wake behavior,
+audibility and operating-system installation UI need a device check.
